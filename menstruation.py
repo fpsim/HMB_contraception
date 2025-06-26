@@ -25,7 +25,7 @@ class Menstruation(fp.Module):
         # Menses
         age_menses=ss.lognorm_ex(14, 3),  # Age of menarche
         age_menopause=ss.normal(50, 3),  # Age of menopause ##TODO: Allow for early menopause, generate a flag
-
+        
         # HMB prediction
         p_hmb_prone=ss.bernoulli(p=0.4),  # Proportion of menstruating women who experience HMB (sans interventions)
         hmb_pred=sc.objdict(  # Parameters for HMB prediction
@@ -47,6 +47,9 @@ class Menstruation(fp.Module):
                             base=0.1,  # Baseline probability of menstrual pain
                             hmb=1.5,  # Effect of HMB on menstrual pain - placeholder
                             iud=-0.5,  # Effect of IUD on menstrual pain - placeholder ##TODO: Other contraceptive methods 
+                        ),
+                        education=sc.objdict(
+                            base=0.5,  # probability that HMB causes education disruption
                         ),
                     ),
 
@@ -91,33 +94,33 @@ class Menstruation(fp.Module):
 
     def early_menopause(self,ppl):
         
-        """
-        Set menopause status based on age or hysterectomy.
-        - Women enter menopause naturally at age >= age_menopause.
-        - Early menopause occurs if hysterectomy before age 45.
-        - Premature menopause occurs if hysterectomy before age 40.
-        """
-
-    ppl = self.sim.people
-
-    # Natural menopause based on age
-    natural_meno = (ppl.female & ~self.menopausal & (ppl.age >= self.age_menopause))
-    self.menopausal[natural_meno] = True
-    self.age_at_menopause[natural_meno] = ppl.age[natural_meno]
-
-    # Hysterectomy-based early/premature menopause
-    new_hyst = (ppl.female & self.hyst & ~self.menopausal)
-
-    # Determine who is <45 or <40 at hysterectomy
-    early = new_hyst & (ppl.age < 45)
-    premature = new_hyst & (ppl.age < 40)
-
-    # Update all relevant states
-    self.menopausal[early] = True
-    self.early_meno[early] = True
-    self.premature_meno[premature] = True
-    self.age_at_menopause[early] = ppl.age[early]
-                return
+            """
+            Set menopause status based on age or hysterectomy.
+            - Women enter menopause naturally at age >= age_menopause.
+            - Early menopause occurs if hysterectomy before age 45.
+            - Premature menopause occurs if hysterectomy before age 40.
+            """
+    
+        ppl = self.sim.people
+    
+        # Natural menopause based on age
+        natural_meno = (ppl.female & ~self.menopausal & (ppl.age >= self.age_menopause))
+        self.menopausal[natural_meno] = True
+        self.age_at_menopause[natural_meno] = ppl.age[natural_meno]
+    
+        # Hysterectomy-based early/premature menopause
+        new_hyst = (ppl.female & self.hyst & ~self.menopausal)
+    
+        # Determine who is <45 or <40 at hysterectomy
+        early = new_hyst & (ppl.age < 45)
+        premature = new_hyst & (ppl.age < 40)
+    
+        # Update all relevant states
+        self.menopausal[early] = True
+        self.early_meno[early] = True
+        self.premature_meno[premature] = True
+        self.age_at_menopause[early] = ppl.age[early]
+            return
 
     def init_results(self):
                 """ Initialize results """
@@ -258,6 +261,9 @@ class Menstruation(fp.Module):
                 self._p_hyst.set(p_hyst)
                 has_hyst = self._p_hyst.filter(hyst_sus)
                 self.hyst[has_hyst] = True
+                
+                #Disrupt education
+                self.disrupt_education(self.sim.people, prob_disrupt=self.pars.hmb_seq.education.base)
 
                 return
 
@@ -282,34 +288,42 @@ class Menstruation(fp.Module):
         
         return
     
-    def amenorrhea_pref(self,ppl): 
-        """ 
-        Time-invariant amenorrhea preferences which will impact contraceptive method choice.
-        """
-        ## TODO: Define distribution; link to increase in prob of pills vs. IUDs
-        ## data placeholder
-        
-        return
+   
+def disrupt_education(self, ppl, prob_disrupt=0.5): 
+    """
+    Probabilistically disrupt education due to heavy menstrual bleeding (HMB).
     
-    def disrupt_education(self, ppl): 
-        """
-        Temporarily disrupt education due to heavy menstrual bleeding. 
-        This disruption can interrupt education progress if it occurs for multiple months in a row.
-        """
-        
-        # Filter people who have not: completed education, dropped out or had their education interrupted
-        students = ppl.filter((ppl.edu_started & ~ppl.edu_completed & ~ppl.edu_dropout & ~ppl.edu_interrupted))
-        
-        # Hinder education progression if a woman is pregnant and towards the end of the first trimester
-        HMB_students = ppl.filter(ppl.students & ppl.heavy_bleed)
-        # Disrupt education
-        probs_disrupt = 0.5 #placeholder
-        HMB_students.ed_disrupted = np.random.binomial(1, probs_disrupt, size=len(HMB_students))
-       
-        
-        ##TO DO: set # of months disrupted to impact attainment/dropout
-        ##TO DO: make temporary per timestep (there must be a quick way to do this and might need to separate from existing interruption mechanism)
-        return
+    Args:
+        ppl: population object
+        prob_disrupt: probability that HMB leads to school interruption (default 0.5)
+    """
+
+    # Get the disruption probability from parameters
+    prob_disrupt = self.pars.hmb_seq.education.base
+
+    # Find eligible students
+    students = ppl.filter(
+        ppl.female &
+        ppl.edu_started & ~ppl.edu_completed & ~ppl.edu_dropout & ~ppl.edu_interrupted
+    )
+
+    # Subset: students currently menstruating and experiencing HMB
+    hmb_students = students[ppl.hmb[students] & self.menstruating[students]]
+
+    # Probabilistically assign school interruption
+    will_disrupt = fpu.binomial_arr(prob_disrupt, len(hmb_students))
+    disrupted_uids = hmb_students[will_disrupt]
+
+    # Set interruption flag
+    ppl.edu_interrupted[disrupted_uids] = True
+
+    # Optional: count months of disruption
+    if not hasattr(ppl, "edu_disruption_count"):
+        ppl.edu_disruption_count = np.zeros(len(ppl), dtype=int)
+    ppl.edu_disruption_count[disrupted_uids] += 1
+
+    return
+
     
 # ---------------- TEST ----------------
 def test_menstruation_module():
