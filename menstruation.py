@@ -57,6 +57,7 @@ class Menstruation(fp.Module):
                         lt40=-5,    # Adjustment for women less than 40
                     ),
                 )
+        
         self.update_pars(pars, **kwargs)
 
                 # Probabilities of various outcomes - all set via models within the module
@@ -78,6 +79,10 @@ class Menstruation(fp.Module):
                     ss.State('pain', label="Menstrual pain"),
                     ss.State('hyst', label="Hysterectomy"),
                     ss.State('hiud', label="Hormonal IUD usage"),
+                    ss.State('menopausal', label='Has entered menopause'),
+                    ss.State('early_meno', label='Early menopause'),
+                    ss.State('premature_meno', label='Premature menopause'),
+                    ss.FloatArr('age_at_menopause', label='Age of menopause onset'),
                     ss.FloatArr('age_menses', label="Age of menarche"),
                     ss.FloatArr('age_menopause', label="Age of menopause"),
                 )
@@ -87,17 +92,32 @@ class Menstruation(fp.Module):
     def early_menopause(self,ppl):
         
         """
-        Define age cut off to be considered in early menopause. 
-        Hysterectomy before that age will put women into early menopause.
+        Set menopause status based on age or hysterectomy.
+        - Women enter menopause naturally at age >= age_menopause.
+        - Early menopause occurs if hysterectomy before age 45.
+        - Premature menopause occurs if hysterectomy before age 40.
         """
-        
-        early_age = 45
-        premature_age = 40
-        
-        ##pseudo code: if age < early_age & hysterectomy == TRUE, then early_menopause
-        ##pseudo code: if age < premature_age & hysterectomy == TRUE, then premature_menopause
-        
-        return
+
+    ppl = self.sim.people
+
+    # Natural menopause based on age
+    natural_meno = (ppl.female & ~self.menopausal & (ppl.age >= self.age_menopause))
+    self.menopausal[natural_meno] = True
+    self.age_at_menopause[natural_meno] = ppl.age[natural_meno]
+
+    # Hysterectomy-based early/premature menopause
+    new_hyst = (ppl.female & self.hyst & ~self.menopausal)
+
+    # Determine who is <45 or <40 at hysterectomy
+    early = new_hyst & (ppl.age < 45)
+    premature = new_hyst & (ppl.age < 40)
+
+    # Update all relevant states
+    self.menopausal[early] = True
+    self.early_meno[early] = True
+    self.premature_meno[premature] = True
+    self.age_at_menopause[early] = ppl.age[early]
+                return
 
     def init_results(self):
                 """ Initialize results """
@@ -109,6 +129,8 @@ class Menstruation(fp.Module):
                     ss.Result('pain_prev', scale=False, label="Prevalence of menstrual pain"),
                     ss.Result('hyst_prev', scale=False, label="Prevalence of hysterectomy"),
                     ss.Result('hiud_prev', scale=False, label="Prevalence of IUD usage"),
+                    ss.Result('early_meno_prev', scale=False, label="Early menopause prevalence"),
+                    ss.Result('premature_meno_prev', scale=False, label="Premature menopause prevalence"),
                 ]
                 self.define_results(*results)
                 return
@@ -128,10 +150,10 @@ class Menstruation(fp.Module):
                 self.hmb_prone[f_uids] = self.pars.p_hmb_prone.rvs(f_uids)
                 return
 
+
     @property
     def menstruating(self):
-        ppl = self.sim.people
-        return ppl.female & (ppl.age > self.age_menses) & (ppl.age < self.age_menopause)
+        return self.sim.people.female & ~self.menopausal & (self.sim.people.age >= self.age_menses)
 
     @property
     def hmb_sus(self):
@@ -248,7 +270,7 @@ class Menstruation(fp.Module):
                 ti = self.ti
                 def count(arr): return np.count_nonzero(arr)
                 def cond_prob(a, b): return sc.safedivide(count(a & b), count(b))
-                for res in ['hmb', 'poor_mh', 'anemic', 'pain', 'hyst', 'iud']:
+                for res in ['hmb', 'poor_mh', 'anemic', 'pain', 'hyst', 'hiud', 'early_meno_prev', 'premature_meno_prev']:
                     self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.menstruating)
                 return
 
