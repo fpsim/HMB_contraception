@@ -11,7 +11,7 @@ import starsim as ss
 import fpsim.defaults as fpd
 import fpsim.locations as fplocs
 
-class Menstruation:
+class Menstruation(fp.Module):
     
     '''Create a class to handle menstruation related events'''
     
@@ -21,7 +21,7 @@ class Menstruation:
         # Define parameters
         self.define_pars(
             unit='month',
-
+            
         # Menses
         age_menses=ss.lognorm_ex(14, 3),  # Age of menarche
         age_menopause=ss.normal(50, 3),  # Age of menopause ##TODO: Allow for early menopause, generate a flag
@@ -77,14 +77,29 @@ class Menstruation:
                     ss.State('poor_mh', label="Poor menstrual hygiene"),
                     ss.State('pain', label="Menstrual pain"),
                     ss.State('hyst', label="Hysterectomy"),
-                    ss.State('iud', label="IUD usage"),
+                    ss.State('hiud', label="Hormonal IUD usage"),
                     ss.FloatArr('age_menses', label="Age of menarche"),
                     ss.FloatArr('age_menopause', label="Age of menopause"),
                 )
 
         return
 
-        def init_results(self):
+    def early_menopause(self,ppl):
+        
+        """
+        Define age cut off to be considered in early menopause. 
+        Hysterectomy before that age will put women into early menopause.
+        """
+        
+        early_age = 45
+        premature_age = 40
+        
+        ##pseudo code: if age < early_age & hysterectomy == TRUE, then early_menopause
+        ##pseudo code: if age < premature_age & hysterectomy == TRUE, then premature_menopause
+        
+        return
+
+    def init_results(self):
                 """ Initialize results """
                 super().init_results()
                 results = [
@@ -93,19 +108,19 @@ class Menstruation:
                     ss.Result('anemic_prev', scale=False, label="Prevalence of anemia"),
                     ss.Result('pain_prev', scale=False, label="Prevalence of menstrual pain"),
                     ss.Result('hyst_prev', scale=False, label="Prevalence of hysterectomy"),
-                    ss.Result('iud_prev', scale=False, label="Prevalence of IUD usage"),
+                    ss.Result('hiud_prev', scale=False, label="Prevalence of IUD usage"),
                 ]
                 self.define_results(*results)
                 return
 
-        def _get_uids(self, upper_age=None):
+    def _get_uids(self, upper_age=None):
                 """ Get uids of females younger than upper_age """
                 people = self.sim.people
                 if upper_age is None: upper_age = 1000
                 within_age = people.age < upper_age
                 return (within_age & people.female).uids
 
-        def set_mens_states(self, upper_age=None):
+    def set_mens_states(self, upper_age=None):
                 """ Set menstrual hygiene states """
                 f_uids = self._get_uids(upper_age=upper_age)
                 self.age_menses[f_uids] = self.pars.age_menses.rvs(f_uids)
@@ -113,31 +128,31 @@ class Menstruation:
                 self.hmb_prone[f_uids] = self.pars.p_hmb_prone.rvs(f_uids)
                 return
 
-        @property
-        def menstruating(self):
-                ppl = self.sim.people
-                return ppl.female & (ppl.age > self.age_menses) & (ppl.age < self.age_menopause)
+    @property
+    def menstruating(self):
+        ppl = self.sim.people
+        return ppl.female & (ppl.age > self.age_menses) & (ppl.age < self.age_menopause)
 
-        @property
-        def hmb_sus(self):
-                return self.menstruating & self.hmb_prone & ~self.hmb
+    @property
+    def hmb_sus(self):
+        return self.menstruating & self.hmb_prone & ~self.hmb
 
-        @property
-        def lt40(self):
-                return self.sim.people.age < 40
+    @property
+    def lt40(self):
+        return self.sim.people.age < 40
 
-        def init_post(self):
-                """ Initialize with sim properties """
-                super().init_post()
+    def init_post(self):
+        """ Initialize with sim properties """
+        super().init_post()
 
-                # Set initial menstrual states
-                self.set_mens_states()
-                self.set_iud()
-                self.set_hmb(self.hmb_sus.uids)
+        # Set initial menstrual states
+        self.set_mens_states()
+        self.set_iud()
+        self.set_hmb(self.hmb_sus.uids)
 
-                return
+        return
 
-        def _logistic(self, uids, pars):
+    def _logistic(self, uids, pars):
                 """ Calculate logistic regression probabilities """
                 intercept = -np.log(1/pars.base-1)
                 rhs = np.full_like(uids, fill_value=intercept, dtype=float)
@@ -150,15 +165,32 @@ class Menstruation:
                 # Calculate the probability
                 return 1 / (1+np.exp(-rhs))
 
-        def set_iud(self):
-                """ Set who will use an IUD """
-                self.iud[:] = False  # Reset the state - TODO, should not reset every step!!!
-                iud_sus = self.menstruating.uids & ~self.iud
-                has_iud = self.pars.p_iud.filter(iud_sus)
-                self.iud[has_iud] = True
-                return
+    def assign_iud_types(self, ppl, p_hiud=0.5):
+        """
+        Among agents with method == IUD, assign hormonal vs copper IUDs.
 
-        def set_hmb(self, uids):
+        Args:
+        ppl: the population object with .method and other arrays
+        p_hiud: probability of having a hormonal IUD (default 0.5)
+        """
+        # Get index of the IUD method
+        iud_method_idx = self.get_method_by_label("IUDs").idx
+
+        # Find users assigned to IUD
+        iud_users = np.where(ppl.method == iud_method_idx)[0]
+
+        # Randomly assign to hormonal IUD vs copper IUD
+        assigned_hiud = iud_users[np.random.rand(len(iud_users)) < p_hiud]
+        assigned_cu_iud = np.setdiff1d(iud_users, assigned_hiud)
+
+        # Set flags (make sure these arrays exist in ppl!)
+        ppl.hiud[assigned_hiud] = True
+        ppl.cu_iud[assigned_cu_iud] = True
+
+        return assigned_hiud, assigned_cu_iud
+    
+    
+    def set_hmb(self, uids):
                 """ Set who will experience heavy menstrual bleeding (HMB) """
                 # Calculate the probability of HMB
                 p_hmb = self._logistic(uids, self.pars.hmb_pred)
@@ -168,14 +200,14 @@ class Menstruation:
                 self.hmb[has_hmb] = True
                 return
 
-        def step(self):
+    def step(self):
                 """ Updates for this timestep """
                 self.set_mens_states(upper_age=self.t.dt)
                 mens_uids = self.menstruating.uids
                 self.hmb[:] = False  # Reset
 
-                # Set IUD usage
-                self.set_iud()
+                # Set hormonal IUD usage
+                self.assign_iud_types()
 
                 # Update HMB
                 self.set_hmb(self.hmb_sus.uids)
@@ -207,11 +239,11 @@ class Menstruation:
 
                 return
 
-        def step_state(self):
+    def step_state(self):
                 """ Updates for this timestep """
                 return
 
-        def update_results(self):
+    def update_results(self):
                 super().update_results()
                 ti = self.ti
                 def count(arr): return np.count_nonzero(arr)
@@ -250,52 +282,32 @@ class Menstruation:
         HMB_students = ppl.filter(ppl.students & ppl.heavy_bleed)
         # Disrupt education
         probs_disrupt = 0.5 #placeholder
-        HMB_students.ed_disrupted = #TODO: binomial trial placeholder 
-        #psuedo code placeholder: If HMB_students.ed_disrupted == 1, then HMB_students.interrupt_education = TRUE
-        
+        HMB_students.ed_disrupted = np.random.binomial(1, probs_disrupt, size=len(HMB_students))
+       
         
         ##TO DO: set # of months disrupted to impact attainment/dropout
         ##TO DO: make temporary per timestep (there must be a quick way to do this and might need to separate from existing interruption mechanism)
         return
     
+# ---------------- TEST ----------------
+def test_menstruation_module():
+    sim = ss.Sim(pop_size=1000, n_days=30)
+    mod = Menstruation()
+    sim.add(mod)
+    sim.run()
+
+    # Check that results were collected
+    for res_key in ['hmb_prev', 'poor_mh_prev', 'anemic_prev', 'pain_prev', 'hyst_prev', 'iud_prev']:
+        assert res_key in mod.results
+        assert len(mod.results[res_key]) == sim.npts
+        assert np.all(mod.results[res_key] >= 0)
+
+    print("Menstruation module test passed.")
 
     
-    def hormonal_method_prefs(self, ppl):
-        
-        """
-        Link HMB state to increased probability of choosing a hormonal method to help reduce heavy bleeding
-        Hormonal methods that reduce bleeding: Hormonal IUD; Oral contraceptive pill; Implant; Injectable
-        """
-        
-        
-        
-        return
-    
-    def hysterectomy(self, ppl):
-        """ 
-        Establish the population-wide prevalence of hysterectomy. 
-        Also links tubal litigation to increased odds of hysterectomy. 
-        For India, draws on data from Prusty et al (2018): https://reproductive-health-journal.biomedcentral.com/articles/10.1186/s12978-017-0445-8
-        """
-        
-        ## data placeholder
-        
-        return
-    
-    def early_menopause(self,ppl):
-        
-        """
-        Define age cut off to be considered in early menopause. 
-        Hysterectomy before that age will put women into early menopause.
-        """
-        
-        early_age = 45
-        premature_age = 40
-        
-        ##pseudo code: if age < early_age & hysterectomy == TRUE, then early_menopause
-        ##pseudo code: if age < premature_age & hysterectomy == TRUE, then premature_menopause
-        
-        return
+
+
+
     
     
     
