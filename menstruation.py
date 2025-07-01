@@ -77,15 +77,31 @@ class Menstruation(ss.Connector):
 
         # Define states
         self.define_states(
-            ss.State('hmb_prone'),  # Prone to HMB
+            # HMB states
+            ss.State('hmb_prone'),
             ss.State('hmb'),
+            ss.State('hmb_sus', label="Susceptible to HMB"),
+
+            # HMB sequelae
             ss.State('anemic'),
             ss.State('poor_mh', label="Poor menstrual hygiene"),
             ss.State('pain', label="Menstrual pain"),
             ss.State('hyst', label="Hysterectomy"),
-            ss.State('hiud_prone', label="Prone to use hormonal IUD, if using IUD"),
+
+            # Menstrual states
+            ss.State('menstruating'),
+            ss.State('premenarchal'),
+            ss.State('post_menarche'),
+            ss.State('menopausal'),
+            ss.State('early_meno'),
+            ss.State('premature_meno'),
             ss.FloatArr('age_menses', label="Age of menarche"),
             ss.FloatArr('age_menopause', label="Age of menopause"),
+
+            # Contraceptive methods
+            ss.State('pill', label="Using hormonal pill"),
+            ss.State('hiud', label="Using hormonal IUD"),
+            ss.State('hiud_prone', label="Prone to use hormonal IUD, if using IUD"),
         )
 
         return
@@ -106,6 +122,10 @@ class Menstruation(ss.Connector):
         self.define_results(*results)
         return
 
+    @property
+    def lt40(self):
+        return (self.sim.people.age < 40) & self.sim.people.female
+
     def _get_uids(self, upper_age=None):
         """ Get uids of females younger than upper_age """
         people = self.sim.people
@@ -121,48 +141,6 @@ class Menstruation(ss.Connector):
         self.hmb_prone[f_uids] = self.pars.p_hmb_prone.rvs(f_uids)
         self.hiud_prone[f_uids] = self.pars.p_hiud.rvs(f_uids)
         return
-
-    @property
-    def premenarchal(self):
-        return self.sim.people.female & (self.sim.people.age < self.age_menses)
-
-    @property
-    def menopausal(self):
-        return self.sim.people.female & (self.sim.people.age > self.age_menopause)
-
-    @property
-    def menstruating(self):
-        return self.sim.people.female & (self.sim.people.age <= self.age_menopause) & (self.sim.people.age >= self.age_menses)
-
-    @property
-    def early_meno(self):
-        return self.menopausal & (self.age_menopause < 45)
-
-    @property
-    def premature_meno(self):
-        return self.menopausal & (self.age_menopause < 40)
-
-    @property
-    def hmb_sus(self):
-        return self.menstruating & self.hmb_prone & ~self.hmb
-
-    @property
-    def lt40(self):
-        return (self.sim.people.age < 40) & self.sim.people.female
-
-    @property
-    def post_menarche(self):
-        return (self.sim.people.age > self.age_menses) & self.sim.people.female
-
-    @property
-    def pill(self):
-        method_idx = sim.people.contraception_module.get_method_by_label('Pill').idx
-        return self.sim.people.method == method_idx
-
-    @property
-    def hiud(self):
-        method_idx = self.sim.people.contraception_module.get_method_by_label('IUDs').idx
-        return (self.sim.people.method == method_idx) & self.hiud_prone
 
     def init_post(self):
         """ Initialize with sim properties """
@@ -199,7 +177,11 @@ class Menstruation(ss.Connector):
 
     def step(self):
         """ Updates for this timestep """
-        self.set_mens_states(upper_age=self.t.dt)
+
+        # Set menstruating states
+        self.set_mens_states(upper_age=self.t.dt)  # for new agents
+        self.step_states()  # for existing agents
+
         mens_uids = self.menstruating.uids
         self.hmb[:] = False  # Reset
 
@@ -237,8 +219,24 @@ class Menstruation(ss.Connector):
 
         return
 
-    def step_state(self):
+    def step_states(self):
         """ Updates for this timestep """
+        ppl = self.sim.people
+        f = ppl.female
+        self.premenarchal[:] = f & (ppl.age < self.age_menses)
+        self.post_menarche[:] = f & (ppl.age > self.age_menses)
+        self.menstruating[:] = f & (ppl.age <= self.age_menopause) & (ppl.age >= self.age_menses)
+        self.menopausal[:] = f & (ppl.age > self.age_menopause)
+        self.early_meno[:] = self.menopausal & (self.age_menopause < 45)
+        self.premature_meno[:] = self.menopausal & (self.age_menopause < 40)
+        self.hmb_sus[:] = self.menstruating & self.hmb_prone & ~self.hmb
+
+        # Contraceptive methods
+        pill_idx = ppl.contraception_module.get_method_by_label('Pill').idx
+        iud_idx = ppl.contraception_module.get_method_by_label('IUDs').idx
+        self.pill[:] = ppl.method == pill_idx
+        self.hiud[:] = (ppl.method == iud_idx) & self.hiud_prone
+
         return
 
     def update_results(self):
@@ -266,6 +264,18 @@ if __name__ == '__main__':
 
     sim = fp.Sim(location='kenya', connectors=[mens, edu], start=2020, stop=2030)
     sim.run(verbose=1/12)
+
+    # Define an intervention to take HMB prone women not using contraception and offer them IUDs
+    def hiud_elig(sim):
+        """ Select menstruating women prone to HMB not using contraception """
+        is_eligible = ((sim.people.female) &
+                       (sim.people.age >= min_age) &
+                       (sim.people.age < max_age) &
+                       (sim.people.has_fin_knowl == False))
+        return is_eligible
+
+
+
 
     # Plot education
     import pylab as pl
