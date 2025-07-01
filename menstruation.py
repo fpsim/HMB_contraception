@@ -276,6 +276,7 @@ class contra_hmb(ss.Intervention):
         return self.sim.people.contraception_module.get_method_by_label('IUDs').idx
 
     def step(self):
+        sim = self.sim
         if sim.t.now() == self.pars.year:
             # Print message
             print(f'Changing IUDs!')
@@ -288,6 +289,9 @@ class contra_hmb(ss.Intervention):
             sim.people.method[accept_uids] = self.iud_idx
             sim.people.on_contra[accept_uids] = True
             sim.people.ever_used_contra[accept_uids] = True
+            method_dur = sim.people.contraception_module.set_dur_method(accept_uids)
+            sim.people.ti_contra[accept_uids] = self.ti + method_dur
+
             self.intervention_applied[accept_uids] = True
         return
 
