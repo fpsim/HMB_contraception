@@ -8,10 +8,8 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
-import fpsim.defaults as fpd
-import fpsim.locations as fplocs
 
-class Menstruation(fp.Module):
+class Menstruation(ss.Connector):
     
     '''Create a class to handle menstruation related events'''
     
@@ -22,85 +20,88 @@ class Menstruation(fp.Module):
         self.define_pars(
             unit='month',
             
-        # Menses
-        age_menses=ss.lognorm_ex(14, 3),  # Age of menarche
-        age_menopause=ss.normal(50, 3),  # Age of menopause ##TODO: Allow for early menopause, generate a flag
-        
-        # HMB prediction
-        p_hmb_prone=ss.bernoulli(p=0.4),  # Proportion of menstruating women who experience HMB (sans interventions)
-        hmb_pred=sc.objdict(  # Parameters for HMB prediction
-                            base=0.95,  # For those prone to HMB, probability they'll experience it this timestep
-                            iud=-10,  # Effect of IUD on HMB - placeholder
-                        ),
+            # Menses
+            age_menses=ss.lognorm_ex(14, 3),  # Age of menarche
+            age_menopause=ss.normal(50, 3),  # Age of menopause ##TODO: Allow for early menopause, generate a flag
 
-        # Non-permanent sequelae of HMB
-        hmb_seq=sc.objdict(
-        poor_mh=sc.objdict(  # Parameters for poor menstrual hygiene
-                            base=0.4,  # Intercept for poor menstrual hygiene
-                            iud=-0.5,  # Effect of IUD on poor menstrual hygiene - placeholder ##TODO: Allow for an effect of other hormonal contraception
-                        ),
-                        anemic=sc.objdict(  # Parameters for anemia
-                            base=0.01,  # Baseline probability of anemia
-                            hmb=1.5,  # Effect of HMB on anemia - placeholder
-                        ),
-                        pain=sc.objdict(  # Parameters for menstrual pain
-                            base=0.1,  # Baseline probability of menstrual pain
-                            hmb=1.5,  # Effect of HMB on menstrual pain - placeholder
-                            iud=-0.5,  # Effect of IUD on menstrual pain - placeholder ##TODO: Other contraceptive methods 
-                        ),
-                        education=sc.objdict(
-                            base=0.5,  # probability that HMB causes education disruption
-                        ),
-                    ),
+            # IUD usage
+            p_hiud=ss.bernoulli(p=0.05),  # Baseline, can be modified by interventions
 
-               # Permanent sequelae of HMB
-                    hyst=sc.objdict(  # Parameters for hysterectomy
-                        base=0.01,  # Baseline probability of hysterectomy
-                        hmb=2,      # Effect of HMB on hysterectomy - placeholder
-                        lt40=-5,    # Adjustment for women less than 40
-                    ),
-                )
+            # HMB prediction
+            p_hmb_prone=ss.bernoulli(p=0.4),  # Proportion of menstruating women who experience HMB (sans interventions)
+            hmb_pred=sc.objdict(  # Parameters for HMB prediction
+                base=0.95,  # For those prone to HMB, probability they'll experience it this timestep
+                hiud=-10,  # Effect of IUD on HMB - placeholder
+            ),
+
+            # Non-permanent sequelae of HMB
+            hmb_seq=sc.objdict(
+                poor_mh=sc.objdict(  # Parameters for poor menstrual hygiene
+                    base=0.4,  # Intercept for poor menstrual hygiene
+                    hiud=-0.5,  # Effect of IUD on poor menstrual hygiene - placeholder ##TODO: Allow for an effect of other hormonal contraception
+                ),
+                anemic=sc.objdict(  # Parameters for anemia
+                    base=0.01,  # Baseline probability of anemia
+                    hmb=1.5,  # Effect of HMB on anemia - placeholder
+                ),
+                pain=sc.objdict(  # Parameters for menstrual pain
+                    base=0.1,  # Baseline probability of menstrual pain
+                    hmb=1.5,  # Effect of HMB on menstrual pain - placeholder
+                    hiud=-0.5,  # Effect of IUD on menstrual pain - placeholder ##TODO: Other contraceptive methods
+                ),
+                # education=sc.objdict(
+                #     base=0.5,  # probability that HMB causes education disruption
+                # ),
+            ),
+
+            # Permanent sequelae of HMB
+            hyst=sc.objdict(  # Parameters for hysterectomy
+                base=0.01,  # Baseline probability of hysterectomy
+                hmb=2,      # Effect of HMB on hysterectomy - placeholder
+                lt40=-5,    # Adjustment for women less than 40
+            ),
+        )
         
         self.update_pars(pars, **kwargs)
 
-                # Probabilities of various outcomes - all set via models within the module
-                # Don't directly alter anything here, as the probabilities are calculated
-                # via logistic regression models based on the parameters defined in the main
-                # parameter dict.
+        # Probabilities of various outcomes - all set via models within the module
+        # Don't directly alter anything here, as the probabilities are calculated
+        # via logistic regression models based on the parameters defined in the main
+        # parameter dict.
         self._p_hmb = ss.bernoulli(p=0)
         self._p_poor_mh = ss.bernoulli(p=0)
         self._p_anemic = ss.bernoulli(p=0)
         self._p_pain = ss.bernoulli(p=0)
         self._p_hyst = ss.bernoulli(p=0)
 
-                # Define states
+        # Define states
         self.define_states(
-                    ss.State('hmb_prone'),  # Prone to HMB
-                    ss.State('hmb'),
-                    ss.State('anemic'),
-                    ss.State('poor_mh', label="Poor menstrual hygiene"),
-                    ss.State('pain', label="Menstrual pain"),
-                    ss.State('hyst', label="Hysterectomy"),
-                    ss.State('hiud', label="Hormonal IUD usage"),
-                    ss.State('menopausal', label='Has entered menopause'),
-                    ss.State('early_meno', label='Early menopause'),
-                    ss.State('premature_meno', label='Premature menopause'),
-                    ss.FloatArr('age_at_menopause', label='Age of menopause onset'),
-                    ss.FloatArr('age_menses', label="Age of menarche"),
-                    ss.FloatArr('age_menopause', label="Age of menopause"),
-                )
+            ss.State('hmb_prone'),  # Prone to HMB
+            ss.State('hmb'),
+            ss.State('anemic'),
+            ss.State('poor_mh', label="Poor menstrual hygiene"),
+            ss.State('pain', label="Menstrual pain"),
+            ss.State('hyst', label="Hysterectomy"),
+            ss.State('hiud', label="Hormonal IUD usage"),
+            ss.State('menopausal', label='Has entered menopause'),
+            ss.State('early_meno', label='Early menopause'),
+            ss.State('premature_meno', label='Premature menopause'),
+            ss.FloatArr('age_at_menopause', label='Age of menopause onset'),
+            ss.FloatArr('age_menses', label="Age of menarche"),
+            ss.FloatArr('age_menopause', label="Age of menopause"),
+        )
 
         return
 
-    def early_menopause(self,ppl):
-        
-            """
-            Set menopause status based on age or hysterectomy.
-            - Women enter menopause naturally at age >= age_menopause.
-            - Early menopause occurs if hysterectomy before age 45.
-            - Premature menopause occurs if hysterectomy before age 40.
-            """
-    
+    def set_early_menopause(self):
+        """
+        NOT FUNCTIONAL YET
+        Set menopause status based on age or hysterectomy.
+        - Women enter menopause naturally at age >= age_menopause.
+        - Early menopause occurs if hysterectomy before age 45.
+        - Premature menopause occurs if hysterectomy before age 40.
+        """
+
         ppl = self.sim.people
     
         # Natural menopause based on age
@@ -120,39 +121,38 @@ class Menstruation(fp.Module):
         self.early_meno[early] = True
         self.premature_meno[premature] = True
         self.age_at_menopause[early] = ppl.age[early]
-            return
+        return
 
     def init_results(self):
-                """ Initialize results """
-                super().init_results()
-                results = [
-                    ss.Result('hmb_prev', scale=False, label="Prevalence of HMB"),
-                    ss.Result('poor_mh_prev', scale=False, label="Prevalence of poor menstrual hygiene"),
-                    ss.Result('anemic_prev', scale=False, label="Prevalence of anemia"),
-                    ss.Result('pain_prev', scale=False, label="Prevalence of menstrual pain"),
-                    ss.Result('hyst_prev', scale=False, label="Prevalence of hysterectomy"),
-                    ss.Result('hiud_prev', scale=False, label="Prevalence of IUD usage"),
-                    ss.Result('early_meno_prev', scale=False, label="Early menopause prevalence"),
-                    ss.Result('premature_meno_prev', scale=False, label="Premature menopause prevalence"),
-                ]
-                self.define_results(*results)
-                return
+        """ Initialize results """
+        super().init_results()
+        results = [
+            ss.Result('hmb_prev', scale=False, label="Prevalence of HMB"),
+            ss.Result('poor_mh_prev', scale=False, label="Prevalence of poor menstrual hygiene"),
+            ss.Result('anemic_prev', scale=False, label="Prevalence of anemia"),
+            ss.Result('pain_prev', scale=False, label="Prevalence of menstrual pain"),
+            ss.Result('hyst_prev', scale=False, label="Prevalence of hysterectomy"),
+            ss.Result('hiud_prev', scale=False, label="Prevalence of IUD usage"),
+            ss.Result('early_meno_prev', scale=False, label="Early menopause prevalence"),
+            ss.Result('premature_meno_prev', scale=False, label="Premature menopause prevalence"),
+        ]
+        self.define_results(*results)
+        return
 
     def _get_uids(self, upper_age=None):
-                """ Get uids of females younger than upper_age """
-                people = self.sim.people
-                if upper_age is None: upper_age = 1000
-                within_age = people.age < upper_age
-                return (within_age & people.female).uids
+        """ Get uids of females younger than upper_age """
+        people = self.sim.people
+        if upper_age is None: upper_age = 1000
+        within_age = people.age < upper_age
+        return (within_age & people.female).uids
 
     def set_mens_states(self, upper_age=None):
-                """ Set menstrual hygiene states """
-                f_uids = self._get_uids(upper_age=upper_age)
-                self.age_menses[f_uids] = self.pars.age_menses.rvs(f_uids)
-                self.age_menopause[f_uids] = self.pars.age_menopause.rvs(f_uids)
-                self.hmb_prone[f_uids] = self.pars.p_hmb_prone.rvs(f_uids)
-                return
-
+        """ Set menstrual hygiene states """
+        f_uids = self._get_uids(upper_age=upper_age)
+        self.age_menses[f_uids] = self.pars.age_menses.rvs(f_uids)
+        self.age_menopause[f_uids] = self.pars.age_menopause.rvs(f_uids)
+        self.hmb_prone[f_uids] = self.pars.p_hmb_prone.rvs(f_uids)
+        return
 
     @property
     def menstruating(self):
@@ -172,26 +172,35 @@ class Menstruation(fp.Module):
 
         # Set initial menstrual states
         self.set_mens_states()
-        self.set_iud()
+        self.set_hiud()
         self.set_hmb(self.hmb_sus.uids)
 
         return
 
     def _logistic(self, uids, pars):
-                """ Calculate logistic regression probabilities """
-                intercept = -np.log(1/pars.base-1)
-                rhs = np.full_like(uids, fill_value=intercept, dtype=float)
+        """ Calculate logistic regression probabilities """
+        intercept = -np.log(1/pars.base-1)
+        rhs = np.full_like(uids, fill_value=intercept, dtype=float)
 
-                # Add all covariates
-                for term, val in pars.items():
-                    if term != 'base':
-                        rhs += val * getattr(self, term)[uids]
+        # Add all covariates
+        for term, val in pars.items():
+            if term != 'base':
+                rhs += val * getattr(self, term)[uids]
 
-                # Calculate the probability
-                return 1 / (1+np.exp(-rhs))
+        # Calculate the probability
+        return 1 / (1+np.exp(-rhs))
+
+    def set_hiud(self):
+        """ Set who will use a hormonal IUD """
+        self.hiud[:] = False  # Reset the state - TODO, should not reset every step!!!
+        hiud_sus = self.menstruating.uids & ~self.hiud
+        has_hiud = self.pars.p_hiud.filter(hiud_sus)
+        self.hiud[has_hiud] = True
+        return
 
     def assign_iud_types(self, ppl, p_hiud=0.5):
         """
+        NOT FUNCTIONAL
         Among agents with method == IUD, assign hormonal vs copper IUDs.
 
         Args:
@@ -213,86 +222,88 @@ class Menstruation(fp.Module):
         ppl.cu_iud[assigned_cu_iud] = True
 
         return assigned_hiud, assigned_cu_iud
-    
-    
+
     def set_hmb(self, uids):
-                """ Set who will experience heavy menstrual bleeding (HMB) """
-                # Calculate the probability of HMB
-                p_hmb = self._logistic(uids, self.pars.hmb_pred)
-                self._p_hmb.set(0)
-                self._p_hmb.set(p_hmb)
-                has_hmb = self._p_hmb.filter(uids)
-                self.hmb[has_hmb] = True
-                return
+        """ Set who will experience heavy menstrual bleeding (HMB) """
+        # Calculate the probability of HMB
+        p_hmb = self._logistic(uids, self.pars.hmb_pred)
+        self._p_hmb.set(0)
+        self._p_hmb.set(p_hmb)
+        has_hmb = self._p_hmb.filter(uids)
+        self.hmb[has_hmb] = True
+        return
 
     def step(self):
-                """ Updates for this timestep """
-                self.set_mens_states(upper_age=self.t.dt)
-                mens_uids = self.menstruating.uids
-                self.hmb[:] = False  # Reset
+        """ Updates for this timestep """
+        self.set_mens_states(upper_age=self.t.dt)
+        mens_uids = self.menstruating.uids
+        self.hmb[:] = False  # Reset
 
-                # Set hormonal IUD usage
-                self.assign_iud_types()
+        # Set IUD usage
+        self.set_hiud()
+        # self.assign_iud_types()
 
-                # Update HMB
-                self.set_hmb(self.hmb_sus.uids)
+        # Update HMB
+        self.set_hmb(self.hmb_sus.uids)
 
-                # Set non-permanent sequalae of HMB
-                for seq, p in self.pars.hmb_seq.items():
-                    old_attr = getattr(self, seq)
-                    old_attr[:] = False  # Reset the state
-                    setattr(self, seq, old_attr)  # Update the state
-                    attr_dist = getattr(self, f'_p_{seq}')
-                    attr_dist.set(0)
+        # Set non-permanent sequalae of HMB
+        for seq, p in self.pars.hmb_seq.items():
+            old_attr = getattr(self, seq)
+            old_attr[:] = False  # Reset the state
+            setattr(self, seq, old_attr)  # Update the state
+            attr_dist = getattr(self, f'_p_{seq}')
+            attr_dist.set(0)
 
-                    # Calculate the probability of the sequelae
-                    p_val = self._logistic(mens_uids, p)
-                    attr_dist = getattr(self, f'_p_{seq}')
-                    attr_dist.set(p_val)
-                    has_attr = attr_dist.filter(mens_uids)
-                    new_attr = getattr(self, seq)
-                    new_attr[has_attr] = True
-                    setattr(self, seq, new_attr)
+            # Calculate the probability of the sequelae
+            p_val = self._logistic(mens_uids, p)
+            attr_dist = getattr(self, f'_p_{seq}')
+            attr_dist.set(p_val)
+            has_attr = attr_dist.filter(mens_uids)
+            new_attr = getattr(self, seq)
+            new_attr[has_attr] = True
+            setattr(self, seq, new_attr)
 
-                # Set hysterectomy state
-                hyst_sus = (self.menstruating & ~self.hyst).uids
-                p_hyst = self._logistic(hyst_sus, self.pars.hyst)
-                self._p_hyst.set(0)
-                self._p_hyst.set(p_hyst)
-                has_hyst = self._p_hyst.filter(hyst_sus)
-                self.hyst[has_hyst] = True
-                
-                #Disrupt education
-                self.disrupt_education(self.sim.people, prob_disrupt=self.pars.hmb_seq.education.base)
+        # Set hysterectomy state
+        hyst_sus = (self.menstruating & ~self.hyst).uids
+        p_hyst = self._logistic(hyst_sus, self.pars.hyst)
+        self._p_hyst.set(0)
+        self._p_hyst.set(p_hyst)
+        has_hyst = self._p_hyst.filter(hyst_sus)
+        self.hyst[has_hyst] = True
 
-                return
+        # # Disrupt education
+        # TODO, remove this - it's done in the education module.
+        # self.disrupt_education(self.sim.people, prob_disrupt=self.pars.hmb_seq.education.base)
+
+        return
 
     def step_state(self):
-                """ Updates for this timestep """
-                return
+        """ Updates for this timestep """
+        return
 
     def update_results(self):
-                super().update_results()
-                ti = self.ti
-                def count(arr): return np.count_nonzero(arr)
-                def cond_prob(a, b): return sc.safedivide(count(a & b), count(b))
-                for res in ['hmb', 'poor_mh', 'anemic', 'pain', 'hyst', 'hiud', 'early_meno_prev', 'premature_meno_prev']:
-                    self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.menstruating)
-                return
-
-
+        super().update_results()
+        ti = self.ti
+        def count(arr): return np.count_nonzero(arr)
+        def cond_prob(a, b): return sc.safedivide(count(a & b), count(b))
+        for res in ['hmb', 'poor_mh', 'anemic', 'pain', 'hyst', 'hiud', 'early_meno', 'premature_meno']:
+            self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.menstruating)
+        return
 
     def update(self, ppl):
-        self.start_heavy_bleed(ppl) #check for acquiring heavy bleed (may not have the data for this)
-        self.stop_heavy_bleed(ppl) #check for stopping heavy bleed (again, may not have the data for this)
+        """
+        NOT FUNCTIONAL
+        TODO, see if we need this - suspect not since HMB status is assigned in set_hmb based on a prediction model
+        """
+        self.start_heavy_bleed(ppl)  # check for acquiring heavy bleed (may not have the data for this)
+        self.stop_heavy_bleed(ppl)  # check for stopping heavy bleed (again, may not have the data for this)
         
         return
     
-   
+
 def disrupt_education(self, ppl, prob_disrupt=0.5): 
     """
     Probabilistically disrupt education due to heavy menstrual bleeding (HMB).
-    
     Args:
         ppl: population object
         prob_disrupt: probability that HMB leads to school interruption (default 0.5)
@@ -326,21 +337,47 @@ def disrupt_education(self, ppl, prob_disrupt=0.5):
 
     
 # ---------------- TEST ----------------
-def test_menstruation_module():
-    sim = ss.Sim(pop_size=1000, n_days=30)
-    mod = Menstruation()
-    sim.add(mod)
-    sim.run()
 
-    # Check that results were collected
-    for res_key in ['hmb_prev', 'poor_mh_prev', 'anemic_prev', 'pain_prev', 'hyst_prev', 'iud_prev']:
-        assert res_key in mod.results
-        assert len(mod.results[res_key]) == sim.npts
-        assert np.all(mod.results[res_key] >= 0)
+if __name__ == '__main__':
 
-    print("Menstruation module test passed.")
+    mens = Menstruation()
 
-    
+    from education import Education
+    objective_data = pd.read_csv(f"data/kenya_objective.csv")
+    attainment_data = pd.read_csv(f"data/kenya_initialization.csv")
+    edu = Education(objective_data=objective_data, attainment_data=attainment_data)
+
+    sim = fp.Sim(location='kenya', connectors=[mens, edu], start=2020, stop=2030)
+    sim.run(verbose=1/12)
+
+    # Plot education
+    import pylab as pl
+    t = sim.results.education.timevec
+    fig, axes = pl.subplots(2, 3, figsize=(20, 12))
+    axes = axes.ravel()
+
+    res_to_plot = ['mean_attainment', 'mean_objective', 'prop_completed', 'prop_in_school', 'prop_dropped']
+    sc.options(fontsize=16)
+
+    for i, res in enumerate(res_to_plot):
+        ax = axes[i]
+        r0 = sim.results.education[res]
+        ax.plot(t, r0)
+        ax.set_title(res)
+
+    all_props = [sim.results.education.prop_in_school,
+                 sim.results.education.prop_completed,
+                 sim.results.education.prop_dropped]
+
+    ax = axes[-1]
+    ax.stackplot(t, all_props, labels=['In school', 'Completed', 'Dropped'], alpha=0.8)
+    ax.set_title('All AGYW')
+    ax.legend()
+
+    sc.figlayout()
+    pl.show()
+
+
 
 
 
