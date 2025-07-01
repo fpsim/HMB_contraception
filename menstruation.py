@@ -250,7 +250,47 @@ class Menstruation(ss.Connector):
             self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.post_menarche)
         return
 
-    
+
+class contra_hmb(ss.Intervention):
+    def __init__(self, pars=None, eligibility=None, **kwargs):
+        super().__init__(name='contra_hmb', eligibility=eligibility)
+        self.define_pars(
+            year=2026,  # When to apply the intervention
+            prob=ss.bernoulli(p=0.2),  # Proportion of HMB-prone non-users who will accept
+        )
+        self.update_pars(pars, **kwargs)
+        if eligibility is None:
+            self.eligibility = lambda sim: (
+                    sim.people.menstruation.hmb_prone &
+                    sim.people.menstruation.menstruating &
+                    ~sim.people.on_contra &
+                    ~sim.people.pregnant)
+        self.define_states(
+            ss.State('intervention_applied', label="Received IUD through intervention"),
+        )
+        return
+
+    @property
+    def iud_idx(self):
+        """ Get the index of the IUD method """
+        return self.sim.people.contraception_module.get_method_by_label('IUDs').idx
+
+    def step(self):
+        if sim.t.now() == self.pars.year:
+            # Print message
+            print(f'Changing IUDs!')
+
+            # Get women who accept the intervention
+            elig_uids = self.check_eligibility()
+            accept_uids = self.pars.prob.filter(elig_uids)
+
+            # Adjust their contraception
+            sim.people.method[accept_uids] = self.iud_idx
+            sim.people.on_contra[accept_uids] = True
+            sim.people.ever_used_contra[accept_uids] = True
+            self.intervention_applied[accept_uids] = True
+        return
+
 # ---------------- TEST ----------------
 
 if __name__ == '__main__':
@@ -262,20 +302,8 @@ if __name__ == '__main__':
     attainment_data = pd.read_csv(f"data/kenya_initialization.csv")
     edu = Education(objective_data=objective_data, attainment_data=attainment_data)
 
-    sim = fp.Sim(location='kenya', connectors=[mens, edu], start=2020, stop=2030)
+    sim = fp.Sim(location='kenya', connectors=[mens, edu], interventions=contra_hmb, start=2020, stop=2030)
     sim.run(verbose=1/12)
-
-    # Define an intervention to take HMB prone women not using contraception and offer them IUDs
-    def hiud_elig(sim):
-        """ Select menstruating women prone to HMB not using contraception """
-        is_eligible = ((sim.people.female) &
-                       (sim.people.age >= min_age) &
-                       (sim.people.age < max_age) &
-                       (sim.people.has_fin_knowl == False))
-        return is_eligible
-
-
-
 
     # Plot education
     import pylab as pl
