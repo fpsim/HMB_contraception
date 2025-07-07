@@ -29,7 +29,7 @@ class SocioDemographic(ss.Module):
 
 
 class Education(ss.Module):
-    def __init__(self, pars=None, objective_data=None, attainment_data=None, name='education', **kwargs):
+    def __init__(self, pars=None, objective_data=None, attainment_data=None, name='edu', **kwargs):
         super().__init__(name=name)
 
         # Define parameters

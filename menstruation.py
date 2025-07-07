@@ -222,7 +222,9 @@ class Menstruation(ss.Connector):
     def step_states(self):
         """ Updates for this timestep """
         ppl = self.sim.people
+        cm = self.sim.connectors.contraception
         f = ppl.female
+
         self.premenarchal[:] = f & (ppl.age < self.age_menses)
         self.post_menarche[:] = f & (ppl.age > self.age_menses)
         self.menstruating[:] = f & (ppl.age <= self.age_menopause) & (ppl.age >= self.age_menses)
@@ -232,8 +234,8 @@ class Menstruation(ss.Connector):
         self.hmb_sus[:] = self.menstruating & self.hmb_prone & ~self.hmb
 
         # Contraceptive methods
-        pill_idx = ppl.contraception_module.get_method_by_label('Pill').idx
-        iud_idx = ppl.contraception_module.get_method_by_label('IUDs').idx
+        pill_idx = cm.get_method_by_label('Pill').idx
+        iud_idx = cm.get_method_by_label('IUDs').idx
         self.pill[:] = ppl.method == pill_idx
         self.hiud[:] = (ppl.method == iud_idx) & self.hiud_prone
 
@@ -273,7 +275,7 @@ class contra_hmb(ss.Intervention):
     @property
     def iud_idx(self):
         """ Get the index of the IUD method """
-        return self.sim.people.contraception_module.get_method_by_label('IUDs').idx
+        return self.sim.connectors.contraception.get_method_by_label('IUDs').idx
 
     def step(self):
         sim = self.sim
@@ -289,7 +291,7 @@ class contra_hmb(ss.Intervention):
             sim.people.method[accept_uids] = self.iud_idx
             sim.people.on_contra[accept_uids] = True
             sim.people.ever_used_contra[accept_uids] = True
-            method_dur = sim.people.contraception_module.set_dur_method(accept_uids)
+            method_dur = sim.connectors.contraception.set_dur_method(accept_uids)
             sim.people.ti_contra[accept_uids] = self.ti + method_dur
 
             self.intervention_applied[accept_uids] = True
@@ -306,12 +308,12 @@ if __name__ == '__main__':
     attainment_data = pd.read_csv(f"data/kenya_initialization.csv")
     edu = Education(objective_data=objective_data, attainment_data=attainment_data)
 
-    sim = fp.Sim(location='kenya', connectors=[mens, edu], interventions=contra_hmb, start=2020, stop=2030)
+    sim = fp.Sim(location='kenya', education_module=edu, connectors=[mens], interventions=contra_hmb, start=2020, stop=2030)
     sim.run(verbose=1/12)
 
     # Plot education
     import pylab as pl
-    t = sim.results.education.timevec
+    t = sim.results.edu.timevec
     fig, axes = pl.subplots(2, 3, figsize=(20, 12))
     axes = axes.ravel()
 
@@ -320,13 +322,13 @@ if __name__ == '__main__':
 
     for i, res in enumerate(res_to_plot):
         ax = axes[i]
-        r0 = sim.results.education[res]
+        r0 = sim.results.edu[res]
         ax.plot(t, r0)
         ax.set_title(res)
 
-    all_props = [sim.results.education.prop_in_school,
-                 sim.results.education.prop_completed,
-                 sim.results.education.prop_dropped]
+    all_props = [sim.results.edu.prop_in_school,
+                 sim.results.edu.prop_completed,
+                 sim.results.edu.prop_dropped]
 
     ax = axes[-1]
     ax.stackplot(t, all_props, labels=['In school', 'Completed', 'Dropped'], alpha=0.8)
