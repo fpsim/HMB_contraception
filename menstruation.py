@@ -297,7 +297,7 @@ if __name__ == '__main__':
 
     mens = Menstruation()
 
-    from education import Education
+    from fpsim import Education
     objective_data = pd.read_csv(f"data/edu_objective.csv")
     attainment_data = pd.read_csv(f"data/edu_initialization.csv")
     edu = Education(objective_data=objective_data, attainment_data=attainment_data)
