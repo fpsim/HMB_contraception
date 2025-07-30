@@ -349,8 +349,6 @@ if __name__ == '__main__':
     sc.figlayout()
     pl.show()
 
-    new_inj = fp.Method(label='newinj')
-    sim.add_method(new_inj)
 
 
 
