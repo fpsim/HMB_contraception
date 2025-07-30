@@ -25,12 +25,17 @@ class Menstruation(ss.Connector):
             age_menses=ss.lognorm_ex(14, 3),  # Age of menarche
             age_menopause=ss.normal(50, 3),  # Age of menopause
             eff_hyst_menopause=ss.normal(-5, 1),  # Adjustment for age of menopause if hysterectomy occurs
+            mean_blood_loss=ss.lognorm_ex(40, 100),  # TODO: calibrate stdev to capture estimate % of women >80 (15-30%)
+            bl_variance=ss.normal(),
 
             # The probability of IUD usage is set within FPsim, so this parameter just
             # determines whether each woman is a hormonal or non-hormonal IUD user
             p_hiud=ss.bernoulli(p=0.5),
 
             # HMB prediction
+            # Turn this into a function whereby:
+            #   - everyone above 80 "is" HMB
+            #   - everyone above 40(?) has a probability associated with perceiving HMB
             p_hmb_prone=ss.bernoulli(p=0.4),  # Proportion of menstruating women who experience HMB (sans interventions)
             hmb_pred=sc.objdict(  # Parameters for HMB prediction
                 base=0.95,  # For those prone to HMB, probability they'll experience it this timestep
@@ -53,6 +58,12 @@ class Menstruation(ss.Connector):
                     hmb=1.5,  # Effect of HMB on menstrual pain - placeholder
                     hiud=-0.5,  # Effect of IUD on menstrual pain - placeholder ##TODO: Other contraceptive methods
                 ),
+                # perceived_hmb=sc.objdict(  # Parameters for perceived HMB
+                #     base=0.01,
+                #     blood_loss=0.1,
+                #     hmb=50,  # Effect of HMB on perceived HMB
+                #     hiud=-0.5,  # Effect of IUD on perceived HMB
+                # ),
             ),
 
             # Permanent sequelae of HMB
@@ -337,6 +348,9 @@ if __name__ == '__main__':
 
     sc.figlayout()
     pl.show()
+
+    new_inj = fp.Method(label='newinj')
+    sim.add_method(new_inj)
 
 
 
