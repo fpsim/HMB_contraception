@@ -41,7 +41,8 @@ class Education(ss.Module):
                 age_15_19=1.1,  # Adjustment for ages 15-19
                 age_20_24=-2,  # Adjustment for ages 20 and older
                 parity=1.,  # Adjustment for parity
-                hmb=1.5,  # Adjustment for HMB
+                # poor_mh=1.25,
+                # perceived_hmb=1.5  # Adjustment for HMB (encompasses both biomedical & perceived)
             ),
             init_dropout=ss.bernoulli(p=0.5),  # Initial dropout probability
         )
