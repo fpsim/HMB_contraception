@@ -2,9 +2,7 @@
 Heavy Menstrual Bleeding
 Adds an agent state to proxy heavy menstrual bleeding and initializes state 
 """
-import fpsim as fp
 import numpy as np
-import pandas as pd
 import sciris as sc
 import starsim as ss
 
@@ -58,12 +56,6 @@ class Menstruation(ss.Connector):
                     hmb=1.5,  # Effect of HMB on menstrual pain - placeholder
                     hiud=-0.5,  # Effect of IUD on menstrual pain - placeholder ##TODO: Other contraceptive methods
                 ),
-                # perceived_hmb=sc.objdict(  # Parameters for perceived HMB
-                #     base=0.01,
-                #     blood_loss=0.1,
-                #     hmb=50,  # Effect of HMB on perceived HMB
-                #     hiud=-0.5,  # Effect of IUD on perceived HMB
-                # ),
             ),
 
             # Permanent sequelae of HMB
@@ -264,109 +256,4 @@ class Menstruation(ss.Connector):
         return
 
 
-class contra_hmb(ss.Intervention):
-    def __init__(self, pars=None, eligibility=None, **kwargs):
-        super().__init__(name='contra_hmb', eligibility=eligibility)
-        self.define_pars(
-            year=2026,  # When to apply the intervention
-            prob=ss.bernoulli(p=0.2),  # Proportion of HMB-prone non-users who will accept
-        )
-        self.update_pars(pars, **kwargs)
-        if eligibility is None:
-            self.eligibility = lambda sim: (
-                    sim.people.menstruation.hmb_prone &
-                    sim.people.menstruation.menstruating &
-                    ~sim.people.on_contra &
-                    ~sim.people.pregnant)
-        self.define_states(
-            ss.State('intervention_applied', label="Received IUD through intervention"),
-        )
-        return
-
-    @property
-    def iud_idx(self):
-        """ Get the index of the IUD method """
-        return self.sim.connectors.contraception.get_method_by_label('IUDs').idx
-
-    def step(self):
-        sim = self.sim
-        if sim.t.now() == self.pars.year:
-            # Print message
-            print(f'Changing IUDs!')
-
-            # Get women who accept the intervention
-            elig_uids = self.check_eligibility()
-            accept_uids = self.pars.prob.filter(elig_uids)
-
-            # Adjust their contraception
-            sim.people.method[accept_uids] = self.iud_idx
-            sim.people.on_contra[accept_uids] = True
-            sim.people.ever_used_contra[accept_uids] = True
-            method_dur = sim.connectors.contraception.set_dur_method(accept_uids)
-            sim.people.ti_contra[accept_uids] = self.ti + method_dur
-
-            self.intervention_applied[accept_uids] = True
-        return
-
-# ---------------- TEST ----------------
-
-if __name__ == '__main__':
-
-    mens = Menstruation()
-
-    from education import Education
-    objective_data = pd.read_csv(f"data/kenya_objective.csv")
-    attainment_data = pd.read_csv(f"data/kenya_initialization.csv")
-    edu = Education(objective_data=objective_data, attainment_data=attainment_data)
-
-    sim = fp.Sim(location='kenya', education_module=edu, connectors=[mens], interventions=contra_hmb, start=2020, stop=2030)
-    sim.run(verbose=1/12)
-
-    # Plot education
-    import pylab as pl
-    t = sim.results.edu.timevec
-    fig, axes = pl.subplots(2, 3, figsize=(20, 12))
-    axes = axes.ravel()
-
-    res_to_plot = ['mean_attainment', 'mean_objective', 'prop_completed', 'prop_in_school', 'prop_dropped']
-    sc.options(fontsize=16)
-
-    for i, res in enumerate(res_to_plot):
-        ax = axes[i]
-        r0 = sim.results.edu[res]
-        ax.plot(t, r0)
-        ax.set_title(res)
-
-    all_props = [sim.results.edu.prop_in_school,
-                 sim.results.edu.prop_completed,
-                 sim.results.edu.prop_dropped]
-
-    ax = axes[-1]
-    ax.stackplot(t, all_props, labels=['In school', 'Completed', 'Dropped'], alpha=0.8)
-    ax.set_title('All AGYW')
-    ax.legend()
-
-    sc.figlayout()
-    pl.show()
-
-
-
-
-
-
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-        
-        
-        
-        
 
