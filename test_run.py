@@ -143,7 +143,7 @@ if __name__ == '__main__':
         years = np.array([y.year for y in t])
         si = sc.findfirst(years, 2020)
         years = years[si:]
-        fig, axes = pl.subplots(2, 3, figsize=(24, 15))
+        fig, axes = pl.subplots(2, 3, figsize=(15, 10))
         axes = axes.ravel()
 
         res_to_plot = ['hiud', 'hmb', 'poor_mh', 'anemic', 'pain', 'hyst']
@@ -156,16 +156,16 @@ if __name__ == '__main__':
             y1 = s_intv.results.menstruation[f'{res}_prev'][::12][si:]
             ax.plot(years, y0, label='Baseline')
             ax.plot(years, y1, label='Increased IUD usage')
-            ax.set_xticks(years[::2])
+            # ax.set_xticks(years[::2])
             ax.axvline(x=2026, color='k', ls='--')
-            ax.set_title(f'{r0.label}')
+            ax.set_title(labels[i])
 
-        pl.legend()
+        pl.legend(fontsize=16, frameon=False, loc='upper left')
         sc.figlayout()
         sc.savefig('hmb_scenario_results.png', dpi=150)
 
         # Plot education
-        fig, axes = pl.subplots(1, 3, figsize=(15, 10))
+        fig, axes = pl.subplots(2, 3, figsize=(15, 10))
         axes = axes.ravel()
 
         res_to_plot = ['mean_attainment', 'mean_objective']
@@ -176,15 +176,16 @@ if __name__ == '__main__':
             y0 = r0[::12][si:]
             ax.plot(years, y0)
             ax.set_title(res)
+            ax.set_title(res.split('_')[1].capitalize())
 
-        all_props = [s_base.results.edu.prop_in_school,
-                     s_base.results.edu.prop_completed,
-                     s_base.results.edu.prop_dropped]
+        all_props = [s_base.results.edu.prop_in_school[::12][si:],
+                     s_base.results.edu.prop_completed[::12][si:],
+                     s_base.results.edu.prop_dropped[::12][si:]]
 
         ax = axes[2]
-        ax.stackplot(t, all_props, labels=['In school', 'Completed', 'Dropped'], alpha=0.8)
+        ax.stackplot(years, all_props, labels=['In school', 'Completed', 'Dropped'], alpha=0.8)
         ax.set_title('All AGYW')
-        ax.legend()
+        ax.legend(fontsize=16)
 
         edu_res = ['prop_in_school', 'prop_completed', 'prop_dropped']
         for i, res in enumerate(edu_res):
@@ -194,11 +195,11 @@ if __name__ == '__main__':
             y1 = s_intv.results.edu[res][::12][si:]
             ax.plot(years, y0, label='Baseline')
             ax.plot(years, y1, label='Increased IUD usage')
-            ax.set_xticks(years[::2])
+            # ax.set_xticks(years[::2])
             ax.axvline(x=2026, color='k', ls='--')
-            ax.set_title(f'{r0.label}')
+            ax.set_title(res.strip('prop_').replace('_',' ').capitalize())
 
-        pl.legend()
+        pl.legend(fontsize=16, frameon=False, loc='upper left')
         sc.figlayout()
         sc.savefig('iud_edu_results.png', dpi=150)
 

@@ -239,8 +239,8 @@ class Menstruation(ss.Connector):
         # Contraceptive methods
         pill_idx = cm.get_method_by_label('Pill').idx
         iud_idx = cm.get_method_by_label('IUDs').idx
-        self.pill[:] = ppl.method == pill_idx
-        self.hiud[:] = (ppl.method == iud_idx) & self.hiud_prone
+        self.pill[:] = ppl.fp.method == pill_idx
+        self.hiud[:] = (ppl.fp.method == iud_idx) & self.hiud_prone
 
         return
 
