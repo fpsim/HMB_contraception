@@ -28,15 +28,15 @@ class Menstruation(ss.Connector):
 
             # The probability of IUD usage is set within FPsim, so this parameter just
             # determines whether each woman is a hormonal or non-hormonal IUD user
-            p_hiud=ss.bernoulli(p=0.5),
+            p_hiud=ss.bernoulli(p=0.17),
 
             # HMB prediction
             # Turn this into a function whereby:
             #   - everyone above 80 "is" HMB
             #   - everyone above 40(?) has a probability associated with perceiving HMB
-            p_hmb_prone=ss.bernoulli(p=0.4),  # Proportion of menstruating women who experience HMB (sans interventions)
+            p_hmb_prone=ss.bernoulli(p=0.486),  # Proportion of menstruating women who experience HMB (sans interventions)
             hmb_pred=sc.objdict(  # Parameters for HMB prediction
-                base=0.95,  # For those prone to HMB, probability they'll experience it this timestep
+                base=0.5,  # For those prone to HMB, probability they'll experience it this timestep
                 pill=-3,  # Effect of hormonal pill on HMB - placeholder
                 hiud=-10,  # Effect of IUD on HMB - placeholder
             ),
