@@ -23,17 +23,12 @@ class Menstruation(ss.Connector):
             age_menses=ss.lognorm_ex(14, 3),  # Age of menarche
             age_menopause=ss.normal(50, 3),  # Age of menopause
             eff_hyst_menopause=ss.normal(-5, 1),  # Adjustment for age of menopause if hysterectomy occurs
-            mean_blood_loss=ss.lognorm_ex(40, 100),  # TODO: calibrate stdev to capture estimate % of women >80 (15-30%)
-            bl_variance=ss.normal(),
 
             # The probability of IUD usage is set within FPsim, so this parameter just
             # determines whether each woman is a hormonal or non-hormonal IUD user
             p_hiud=ss.bernoulli(p=0.17),
 
             # HMB prediction
-            # Turn this into a function whereby:
-            #   - everyone above 80 "is" HMB
-            #   - everyone above 40(?) has a probability associated with perceiving HMB
             p_hmb_prone=ss.bernoulli(p=0.486),  # Proportion of menstruating women who experience HMB (sans interventions)
             hmb_pred=sc.objdict(  # Parameters for HMB prediction
                 base=0.5,  # For those prone to HMB, probability they'll experience it this timestep
