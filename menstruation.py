@@ -2,9 +2,7 @@
 Heavy Menstrual Bleeding
 Adds an agent state to proxy heavy menstrual bleeding and initializes state 
 """
-import fpsim as fp
 import numpy as np
-import pandas as pd
 import sciris as sc
 import starsim as ss
 
@@ -28,12 +26,12 @@ class Menstruation(ss.Connector):
 
             # The probability of IUD usage is set within FPsim, so this parameter just
             # determines whether each woman is a hormonal or non-hormonal IUD user
-            p_hiud=ss.bernoulli(p=0.5),
+            p_hiud=ss.bernoulli(p=0.17),
 
             # HMB prediction
-            p_hmb_prone=ss.bernoulli(p=0.4),  # Proportion of menstruating women who experience HMB (sans interventions)
+            p_hmb_prone=ss.bernoulli(p=0.486),  # Proportion of menstruating women who experience HMB (sans interventions)
             hmb_pred=sc.objdict(  # Parameters for HMB prediction
-                base=0.95,  # For those prone to HMB, probability they'll experience it this timestep
+                base=0.5,  # For those prone to HMB, probability they'll experience it this timestep
                 pill=-3,  # Effect of hormonal pill on HMB - placeholder
                 hiud=-10,  # Effect of IUD on HMB - placeholder
             ),
@@ -222,7 +220,9 @@ class Menstruation(ss.Connector):
     def step_states(self):
         """ Updates for this timestep """
         ppl = self.sim.people
+        cm = self.sim.connectors.contraception
         f = ppl.female
+
         self.premenarchal[:] = f & (ppl.age < self.age_menses)
         self.post_menarche[:] = f & (ppl.age > self.age_menses)
         self.menstruating[:] = f & (ppl.age <= self.age_menopause) & (ppl.age >= self.age_menses)
@@ -232,10 +232,10 @@ class Menstruation(ss.Connector):
         self.hmb_sus[:] = self.menstruating & self.hmb_prone & ~self.hmb
 
         # Contraceptive methods
-        pill_idx = ppl.contraception_module.get_method_by_label('Pill').idx
-        iud_idx = ppl.contraception_module.get_method_by_label('IUDs').idx
-        self.pill[:] = ppl.method == pill_idx
-        self.hiud[:] = (ppl.method == iud_idx) & self.hiud_prone
+        pill_idx = cm.get_method_by_label('Pill').idx
+        iud_idx = cm.get_method_by_label('IUDs').idx
+        self.pill[:] = ppl.fp.method == pill_idx
+        self.hiud[:] = (ppl.fp.method == iud_idx) & self.hiud_prone
 
         return
 
@@ -251,104 +251,4 @@ class Menstruation(ss.Connector):
         return
 
 
-class contra_hmb(ss.Intervention):
-    def __init__(self, pars=None, eligibility=None, **kwargs):
-        super().__init__(name='contra_hmb', eligibility=eligibility)
-        self.define_pars(
-            year=2026,  # When to apply the intervention
-            prob=ss.bernoulli(p=0.2),  # Proportion of HMB-prone non-users who will accept
-        )
-        self.update_pars(pars, **kwargs)
-        if eligibility is None:
-            self.eligibility = lambda sim: (
-                    sim.people.menstruation.hmb_prone &
-                    sim.people.menstruation.menstruating &
-                    ~sim.people.on_contra &
-                    ~sim.people.pregnant)
-        self.define_states(
-            ss.State('intervention_applied', label="Received IUD through intervention"),
-        )
-        return
-
-    @property
-    def iud_idx(self):
-        """ Get the index of the IUD method """
-        return self.sim.people.contraception_module.get_method_by_label('IUDs').idx
-
-    def step(self):
-        if sim.t.now() == self.pars.year:
-            # Print message
-            print(f'Changing IUDs!')
-
-            # Get women who accept the intervention
-            elig_uids = self.check_eligibility()
-            accept_uids = self.pars.prob.filter(elig_uids)
-
-            # Adjust their contraception
-            sim.people.method[accept_uids] = self.iud_idx
-            sim.people.on_contra[accept_uids] = True
-            sim.people.ever_used_contra[accept_uids] = True
-            self.intervention_applied[accept_uids] = True
-        return
-
-# ---------------- TEST ----------------
-
-if __name__ == '__main__':
-
-    mens = Menstruation()
-
-    from fpsim import Education
-    objective_data = pd.read_csv(f"data/edu_objective.csv")
-    attainment_data = pd.read_csv(f"data/edu_initialization.csv")
-    edu = Education(objective_data=objective_data, attainment_data=attainment_data)
-
-    sim = fp.Sim(location='kenya', connectors=[mens, edu], interventions=contra_hmb, start=2020, stop=2030)
-    sim.run(verbose=1/12)
-
-    # Plot education
-    import pylab as pl
-    t = sim.results.education.timevec
-    fig, axes = pl.subplots(2, 3, figsize=(20, 12))
-    axes = axes.ravel()
-
-    res_to_plot = ['mean_attainment', 'mean_objective', 'prop_completed', 'prop_in_school', 'prop_dropped']
-    sc.options(fontsize=16)
-
-    for i, res in enumerate(res_to_plot):
-        ax = axes[i]
-        r0 = sim.results.education[res]
-        ax.plot(t, r0)
-        ax.set_title(res)
-
-    all_props = [sim.results.education.prop_in_school,
-                 sim.results.education.prop_completed,
-                 sim.results.education.prop_dropped]
-
-    ax = axes[-1]
-    ax.stackplot(t, all_props, labels=['In school', 'Completed', 'Dropped'], alpha=0.8)
-    ax.set_title('All AGYW')
-    ax.legend()
-
-    sc.figlayout()
-    pl.show()
-
-
-
-
-
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-        
-        
-        
-        
 
