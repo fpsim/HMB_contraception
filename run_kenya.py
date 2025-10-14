@@ -115,7 +115,7 @@ if __name__ == '__main__':
         # 'plot_hmb',  # Plot the HMB results
         'run_scenario',  # Run a scenario with interventions
     ]
-    do_run = True
+    do_run = False
 
     if 'calib' in to_run:
         if do_run:
@@ -205,9 +205,15 @@ if __name__ == '__main__':
             # ax.set_xticks(years[::2])
             ax.axvline(x=2026, color='k', ls='--')
             ax.set_title(labels[i])
-            ax.set_ylim(bottom=0, top=100)
+            ax.set_ylim(bottom=0)
+            if i in [0, 3]:
+                ax.set_ylabel('Prevalence (%)')
 
-        pl.legend(fontsize=16, frameon=False, loc='upper left')
+        # Make an empty final axis
+        ax = axes[5]
+        ax.axis('off')
+
+        axes[0].legend(fontsize=16, frameon=False, loc='upper left')
         sc.figlayout()
         sc.savefig('figures/hmb_scenario_results.png', dpi=150)
 
