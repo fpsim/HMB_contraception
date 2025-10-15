@@ -164,9 +164,9 @@ if __name__ == '__main__':
             s_base = make_sim(stop=2032)
             s_i10 = make_sim(stop=2032)
             s_i50 = make_sim(stop=2032)
-            from interventions import contra_hmb
-            s_i10['pars']['interventions'] = contra_hmb(prob=0.1)
-            s_i50['pars']['interventions'] = contra_hmb(prob=0.5)
+            from interventions import contra_hmb, txa
+            s_i10['pars']['interventions'] = [contra_hmb(prob=0.1), txa(prob=0.1)]
+            s_i50['pars']['interventions'] = [contra_hmb(prob=0.5), txa(prob=0.5)]
 
             m = ss.parallel([s_base, s_i10, s_i50], parallel=True)
             s_base, s_i10, s_i50 = m.sims[:]  # Replace with run versions
@@ -200,8 +200,8 @@ if __name__ == '__main__':
             y1 = s_i10.results.menstruation[f'{res}_prev'][::12][si:]
             y2 = s_i50.results.menstruation[f'{res}_prev'][::12][si:]
             ax.plot(years, y0*100, label='Baseline')
-            ax.plot(years, y1*100, label='hIUD 10% uptake')
-            ax.plot(years, y2*100, label='hIUD 50% uptake')
+            ax.plot(years, y1*100, label='hIUD+TXA 10% uptake')
+            ax.plot(years, y2*100, label='hIUD+TXA 50% uptake')
             # ax.set_xticks(years[::2])
             ax.axvline(x=2026, color='k', ls='--')
             ax.set_title(labels[i])
