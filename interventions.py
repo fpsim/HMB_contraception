@@ -57,7 +57,7 @@ class contra_hmb(ss.Intervention):
             # Print message
             print(f'Changing IUDs!')
 
-            # Get women who accept the intervention
+            # Get women who accept the intervention package
             elig_uids = self.check_eligibility()
             accept_uids = self.pars.prob.filter(elig_uids)
 
@@ -69,6 +69,33 @@ class contra_hmb(ss.Intervention):
             sim.people.fp.ti_contra[accept_uids] = self.ti + method_dur
             sim.people.menstruation.hiud_prone[accept_uids] = 1
 
+            self.intervention_applied[accept_uids] = True
+        return
+
+
+class txa(ss.Intervention):
+    def __init__(self):
+        super().__init__(name='txa')
+        self.define_pars(
+            year=2026,  # When to apply the intervention
+            prob=ss.bernoulli(p=0.5),  # Proportion of HMB-prone non-users who will accept
+        )
+        self.define_states(
+            ss.State('intervention_applied', label="Received TXA through intervention"),
+        )
+        return
+
+    def step(self):
+        sim = self.sim
+        if sim.t.now() == self.pars.year:
+            # Print message
+            print(f'Adding TXA')
+
+            # Get women who accept the intervention package
+            elig_uids = self.check_eligibility()
+            accept_uids = self.pars.prob.filter(elig_uids)
+
+            sim.diseases.menstruation.txa[accept_uids] = True
             self.intervention_applied[accept_uids] = True
         return
 
