@@ -29,11 +29,23 @@ class Menstruation(ss.Connector):
             p_hiud=ss.bernoulli(p=0.17),
 
             # HMB prediction
+            # TODO: consider replacing this binary variable (HMB yes/now) with a continuous one representing blood loss
             p_hmb_prone=ss.bernoulli(p=0.486),  # Proportion of menstruating women who experience HMB (sans interventions)
             hmb_pred=sc.objdict(  # Parameters for HMB prediction
-                base=0.5,  # For those prone to HMB, probability they'll experience it this timestep
-                pill=-3,  # Effect of hormonal pill on HMB - placeholder
-                hiud=-10,  # Effect of IUD on HMB - placeholder
+                # Baseline odds that those prone to HMB will experience it this timestep
+                # This is converted to an intercept in the logistic regression: -np.log(1/base-1)
+                base=0.5,
+                # Effect of hormonal pill on HMB - placeholder.
+                # Interpretation: baseline odds without pill is 0.5
+                # Odds with pill is 1/(1+exp(-(0-3)))=0.047, i.e. reduces odds by ~90%
+                pill=-3,
+                # Effect of IUD on HMB - placeholder
+                # Interpretation: baseline odds without pill is 1/(1+exp(-(0)))=0.5
+                # Odds with IUD is 1/(1+exp(-(0-10)))=0.000045, i.e. reduces odds by ~99%
+                hiud=-10,
+                # Effect of tranexamic acid on HMB - placeholder
+                # Odds with TX is 1/(1+exp(-(0-2)))=0.119, i.e. reduces odds by ~76%
+                txa=-2,
             ),
 
             # Non-permanent sequelae of HMB
@@ -96,9 +108,10 @@ class Menstruation(ss.Connector):
             ss.FloatArr('age_menses', label="Age of menarche"),
             ss.FloatArr('age_menopause', label="Age of menopause"),
 
-            # Contraceptive methods
+            # Contraceptive methods and other HMB prevention methods
             ss.State('pill', label="Using hormonal pill"),
             ss.State('hiud', label="Using hormonal IUD"),
+            ss.State('txa', label="Using tranexamic acid"),
             ss.State('hiud_prone', label="Prone to use hormonal IUD, if using IUD"),
         )
 
