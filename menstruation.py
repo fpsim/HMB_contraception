@@ -51,17 +51,21 @@ class Menstruation(ss.Connector):
             # Non-permanent sequelae of HMB
             hmb_seq=sc.objdict(
                 poor_mh=sc.objdict(  # Parameters for poor menstrual hygiene
-                    base=0.4,  # Intercept for poor menstrual hygiene
-                    hiud=-0.5,  # Effect of IUD on poor menstrual hygiene - placeholder ##TODO: Allow for an effect of other hormonal contraception
+                    base = 0.4,  # Intercept for poor menstrual hygiene
+                    hiud = -0.5,  # Effect of hormonal IUD on poor menstrual hygiene - placeholder 
+                    pill = -0.5, # Effect of pill on poor menstrual hygiene - placeholder
+                    txa = -0.5, # Effect of TXA on poor menstrual hygiene - placeholder
                 ),
                 anemic=sc.objdict(  # Parameters for anemia
-                    base=0.01,  # Baseline probability of anemia
-                    hmb=1.5,  # Effect of HMB on anemia - placeholder
+                    base = 0.01,  # Baseline probability of anemia
+                    hmb = 1.5,  # Effect of HMB on anemia - placeholder
                 ),
                 pain=sc.objdict(  # Parameters for menstrual pain
-                    base=0.1,  # Baseline probability of menstrual pain
-                    hmb=1.5,  # Effect of HMB on menstrual pain - placeholder
-                    hiud=-0.5,  # Effect of IUD on menstrual pain - placeholder ##TODO: Other contraceptive methods
+                    base = 0.1,  # Baseline probability of menstrual pain
+                    hmb = 1.5,  # Effect of HMB on menstrual pain - placeholder
+                    hiud = -0.5,  # Effect of hormonal IUD on menstrual pain - placeholder ##TODO: Other contraceptive methods
+                    pill = -0.5, # Effect of pill on menstrual pain - placeholder
+                    txa = -0.5, # Effect of TXA on menstrual pain - placeholder
                 ),
             ),
 
@@ -88,34 +92,35 @@ class Menstruation(ss.Connector):
         # Define states
         self.define_states(
             # HMB states
-            ss.State('hmb_prone'),
-            ss.State('hmb'),
-            ss.State('hmb_sus', label="Susceptible to HMB"),
+            ss.BoolState('hmb_prone'),
+            ss.BoolState('hmb'),
+            ss.BoolState('hmb_sus', label="Susceptible to HMB"),
 
             # HMB sequelae
-            ss.State('anemic'),
-            ss.State('poor_mh', label="Poor menstrual hygiene"),
-            ss.State('pain', label="Menstrual pain"),
-            ss.State('hyst', label="Hysterectomy"),
+            ss.BoolState('anemic'),
+            ss.BoolState('poor_mh', label="Poor menstrual hygiene"),
+            ss.BoolState('pain', label="Menstrual pain"),
+            ss.BoolState('hyst', label="Hysterectomy"),
 
             # Menstrual states
-            ss.State('menstruating'),
-            ss.State('premenarchal'),
-            ss.State('post_menarche'),
-            ss.State('menopausal'),
-            ss.State('early_meno'),
-            ss.State('premature_meno'),
+            ss.BoolState('menstruating'),
+            ss.BoolState('premenarchal'),
+            ss.BoolState('post_menarche'),
+            ss.BoolState('menopausal'),
+            ss.BoolState('early_meno'),
+            ss.BoolState('premature_meno'),
             ss.FloatArr('age_menses', label="Age of menarche"),
             ss.FloatArr('age_menopause', label="Age of menopause"),
 
             # Contraceptive methods and other HMB prevention methods
-            ss.State('pill', label="Using hormonal pill"),
-            ss.State('hiud', label="Using hormonal IUD"),
-            ss.State('txa', label="Using tranexamic acid"),
-            ss.State('hiud_prone', label="Prone to use hormonal IUD, if using IUD"),
+            ss.BoolState('pill', label="Using hormonal pill"),
+            ss.BoolState('hiud', label="Using hormonal IUD"),
+            ss.BoolState('txa', label="Using tranexamic acid"),
+            ss.BoolState('hiud_prone', label="Prone to use hormonal IUD, if using IUD"),
         )
 
         return
+
 
     def init_results(self):
         """ Initialize results """
@@ -132,17 +137,23 @@ class Menstruation(ss.Connector):
         ]
         self.define_results(*results)
         return
-
+    
+    
+    # property: less than 40 years old
     @property
     def lt40(self):
         return (self.sim.people.age < 40) & self.sim.people.female
-
+    
+    
+    # get ids of women within age limit ( < upper_age )
     def _get_uids(self, upper_age=None):
         """ Get uids of females younger than upper_age """
         people = self.sim.people
         if upper_age is None: upper_age = 1000
-        within_age = people.age < upper_age
+        within_age = people.age < float(upper_age)
+        
         return (within_age & people.female).uids
+
 
     def set_mens_states(self, upper_age=None):
         """ Set menstrual states """
@@ -151,7 +162,9 @@ class Menstruation(ss.Connector):
         self.age_menopause[f_uids] = self.pars.age_menopause.rvs(f_uids)
         self.hmb_prone[f_uids] = self.pars.p_hmb_prone.rvs(f_uids)
         self.hiud_prone[f_uids] = self.pars.p_hiud.rvs(f_uids)
+        
         return
+
 
     def init_post(self):
         """ Initialize with sim properties """
@@ -162,6 +175,7 @@ class Menstruation(ss.Connector):
         self.set_hmb(self.hmb_sus.uids)
 
         return
+
 
     def _logistic(self, uids, pars):
         """ Calculate logistic regression probabilities """
@@ -176,19 +190,23 @@ class Menstruation(ss.Connector):
         # Calculate the probability
         return 1 / (1+np.exp(-rhs))
 
+
     def set_hmb(self, uids):
         """ Set who will experience heavy menstrual bleeding (HMB) """
-        # Calculate the probability of HMB
+        # Calculate the probability of HMB (based on interventions)
         p_hmb = self._logistic(uids, self.pars.hmb_pred)
         self._p_hmb.set(0)
         self._p_hmb.set(p_hmb)
+        # filter returns True if p_hmb > 0.5
         has_hmb = self._p_hmb.filter(uids)
+        # set hmb among those uids filtered above
         self.hmb[has_hmb] = True
         return
 
+
     def step(self):
         """ Updates for this timestep """
-
+                
         # Set menstruating states
         self.set_mens_states(upper_age=self.t.dt)  # for new agents
         self.step_states()  # for existing agents
@@ -203,7 +221,9 @@ class Menstruation(ss.Connector):
         for seq, p in self.pars.hmb_seq.items():
             old_attr = getattr(self, seq)
             old_attr[:] = False  # Reset the state
-            setattr(self, seq, old_attr)  # Update the state
+            # Update the state
+            #setattr(self, seq, old_attr)  
+            self.setattribute(seq, old_attr)
             attr_dist = getattr(self, f'_p_{seq}')
             attr_dist.set(0)
 
@@ -214,7 +234,9 @@ class Menstruation(ss.Connector):
             has_attr = attr_dist.filter(mens_uids)
             new_attr = getattr(self, seq)
             new_attr[has_attr] = True
-            setattr(self, seq, new_attr)
+            # Update the state
+            #setattr(self, seq, new_attr)
+            self.setattribute(seq, new_attr)
 
         # Set hysterectomy state
         hyst_sus = (self.menstruating & ~self.hyst).uids
@@ -229,6 +251,7 @@ class Menstruation(ss.Connector):
         self.age_menopause[has_hyst] += eff_hyst_menopause
 
         return
+
 
     def step_states(self):
         """ Updates for this timestep """
@@ -251,6 +274,7 @@ class Menstruation(ss.Connector):
         self.hiud[:] = (ppl.fp.method == iud_idx) & self.hiud_prone
 
         return
+
 
     def update_results(self):
         super().update_results()
