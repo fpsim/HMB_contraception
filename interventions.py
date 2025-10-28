@@ -74,15 +74,22 @@ class contra_hmb(ss.Intervention):
 
 
 class txa(ss.Intervention):
-    def __init__(self):
+    def __init__(self, pars=None, eligibility=None, **kwargs):
         super().__init__(name='txa')
         self.define_pars(
             year=2026,  # When to apply the intervention
             prob=ss.bernoulli(p=0.5),  # Proportion of HMB-prone non-users who will accept
         )
+        self.update_pars(pars, **kwargs)
         self.define_states(
             ss.State('intervention_applied', label="Received TXA through intervention"),
         )
+        if eligibility is None:
+            self.eligibility = lambda sim: (
+                    sim.people.menstruation.hmb_prone &
+                    sim.people.menstruation.menstruating &
+                    # ~sim.people.on_contra &
+                    ~sim.people.fp.pregnant)
         return
 
     def step(self):
