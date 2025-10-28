@@ -42,7 +42,7 @@ class contra_hmb(ss.Intervention):
                     # ~sim.people.on_contra &
                     ~sim.people.fp.pregnant)
         self.define_states(
-            ss.State('intervention_applied', label="Received IUD through intervention"),
+            ss.BoolState('intervention_applied', label="Received IUD through intervention"),
         )
         return
 
