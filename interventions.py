@@ -102,7 +102,7 @@ class txa(ss.Intervention):
             elig_uids = self.check_eligibility()
             accept_uids = self.pars.prob.filter(elig_uids)
 
-            sim.diseases.menstruation.txa[accept_uids] = True
+            sim.people.menstruation.txa[accept_uids] = True
             self.intervention_applied[accept_uids] = True
         return
 
