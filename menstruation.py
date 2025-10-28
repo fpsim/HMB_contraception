@@ -88,31 +88,31 @@ class Menstruation(ss.Connector):
         # Define states
         self.define_states(
             # HMB states
-            ss.State('hmb_prone'),
-            ss.State('hmb'),
-            ss.State('hmb_sus', label="Susceptible to HMB"),
+            ss.BoolState('hmb_prone'),
+            ss.BoolState('hmb'),
+            ss.BoolState('hmb_sus', label="Susceptible to HMB"),
 
             # HMB sequelae
-            ss.State('anemic'),
-            ss.State('poor_mh', label="Poor menstrual hygiene"),
-            ss.State('pain', label="Menstrual pain"),
-            ss.State('hyst', label="Hysterectomy"),
+            ss.BoolState('anemic'),
+            ss.BoolState('poor_mh', label="Poor menstrual hygiene"),
+            ss.BoolState('pain', label="Menstrual pain"),
+            ss.BoolState('hyst', label="Hysterectomy"),
 
             # Menstrual states
-            ss.State('menstruating'),
-            ss.State('premenarchal'),
-            ss.State('post_menarche'),
-            ss.State('menopausal'),
-            ss.State('early_meno'),
-            ss.State('premature_meno'),
+            ss.BoolState('menstruating'),
+            ss.BoolState('premenarchal'),
+            ss.BoolState('post_menarche'),
+            ss.BoolState('menopausal'),
+            ss.BoolState('early_meno'),
+            ss.BoolState('premature_meno'),
             ss.FloatArr('age_menses', label="Age of menarche"),
             ss.FloatArr('age_menopause', label="Age of menopause"),
 
             # Contraceptive methods and other HMB prevention methods
-            ss.State('pill', label="Using hormonal pill"),
-            ss.State('hiud', label="Using hormonal IUD"),
-            ss.State('txa', label="Using tranexamic acid"),
-            ss.State('hiud_prone', label="Prone to use hormonal IUD, if using IUD"),
+            ss.BoolState('pill', label="Using hormonal pill"),
+            ss.BoolState('hiud', label="Using hormonal IUD"),
+            ss.BoolState('txa', label="Using tranexamic acid"),
+            ss.BoolState('hiud_prone', label="Prone to use hormonal IUD, if using IUD"),
         )
 
         return
@@ -140,8 +140,8 @@ class Menstruation(ss.Connector):
     def _get_uids(self, upper_age=None):
         """ Get uids of females younger than upper_age """
         people = self.sim.people
-        if upper_age is None: upper_age = 1000
-        within_age = people.age < upper_age
+        if upper_age is None: upper_age = ss.years(1000)
+        within_age = people.age < upper_age.value
         return (within_age & people.female).uids
 
     def set_mens_states(self, upper_age=None):
@@ -203,7 +203,7 @@ class Menstruation(ss.Connector):
         for seq, p in self.pars.hmb_seq.items():
             old_attr = getattr(self, seq)
             old_attr[:] = False  # Reset the state
-            setattr(self, seq, old_attr)  # Update the state
+            self.setattribute(seq, old_attr)  # Update the state
             attr_dist = getattr(self, f'_p_{seq}')
             attr_dist.set(0)
 
@@ -214,7 +214,7 @@ class Menstruation(ss.Connector):
             has_attr = attr_dist.filter(mens_uids)
             new_attr = getattr(self, seq)
             new_attr[has_attr] = True
-            setattr(self, seq, new_attr)
+            self.setattribute(seq, new_attr)
 
         # Set hysterectomy state
         hyst_sus = (self.menstruating & ~self.hyst).uids

@@ -21,12 +21,7 @@ plt.Config.show_rmse = False
 
 
 def make_pars():
-    pars = fp.make_fp_pars()  # For default pars
-    pars.update_location('kenya')
-
-    # Modify individual fecundity and exposure parameters
-    # These adjust each woman's probability of conception and exposure to pregnancy.
-    pars['exposure_factor'] = 2
+    pars = fp.get_calib_pars('kenya')
 
     # Adjust contraceptive choice parameters
     pars['prob_use_intercept'] = -1  # Intercept for the probability of using contraception
@@ -110,12 +105,14 @@ def set_font(size=None, font='Libertinus Sans'):
 
 if __name__ == '__main__':
 
+    ss.options.warnings = 'error'
+
     to_run = [
-        # 'calib',
+        'calib',
         # 'plot_hmb',  # Plot the HMB results
-        'run_scenario',  # Run a scenario with interventions
+        # 'run_scenario',  # Run a scenario with interventions
     ]
-    do_run = False
+    do_run = True
 
     if 'calib' in to_run:
         if do_run:

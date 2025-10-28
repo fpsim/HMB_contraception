@@ -55,10 +55,10 @@ class Education(ss.Module):
         self.define_states(
             ss.FloatArr('objective', default=self.get_obj_dist(objective_data)),  # Education objectives
             ss.FloatArr('attainment', default=0),  # Education attainment - initialized as 0, reset if data provided
-            ss.State('started', default=False),  # Whether education has been started
-            ss.State('in_school'),  # Currently in school
-            ss.State('completed'),  # Whether education is completed
-            ss.State('dropped'),  # Whether education was dropped
+            ss.BoolState('started', default=False),  # Whether education has been started
+            ss.BoolState('in_school'),  # Currently in school
+            ss.BoolState('completed'),  # Whether education is completed
+            ss.BoolState('dropped'),  # Whether education was dropped
         )
 
         # Store things that will be processed after sim initialization
