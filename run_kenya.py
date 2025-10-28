@@ -109,8 +109,8 @@ if __name__ == '__main__':
 
     to_run = [
         'calib',
-        # 'plot_hmb',  # Plot the HMB results
-        # 'run_scenario',  # Run a scenario with interventions
+        'plot_hmb',  # Plot the HMB results
+        'run_scenario',  # Run a scenario with interventions
     ]
     do_run = True
 
