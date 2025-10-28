@@ -82,7 +82,7 @@ class txa(ss.Intervention):
         )
         self.update_pars(pars, **kwargs)
         self.define_states(
-            ss.State('intervention_applied', label="Received TXA through intervention"),
+            ss.BoolState('intervention_applied', label="Received TXA through intervention"),
         )
         if eligibility is None:
             self.eligibility = lambda sim: (
