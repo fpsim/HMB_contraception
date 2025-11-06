@@ -8,6 +8,23 @@ import starsim as ss
 
 
 
+# To do: generalize code to allow for sensitivity analysis over effectiveness parameters
+"""
+To calculate the intercept values from the interventions' odds of hmb:
+# define desired odds of hmb, given intervention
+odds_hmb_base = 0.5, # assumption
+odds_hmb_hiud =  (1-0.312) * 0.5, # Ref (Park, 2015)
+odds_hmb_txa = (1 - 0.5*0.312) * 0.5, # 50% effectiveness of hiud, Ref (Bofill Rodriguez, 2022)
+odds_hmb_pill = (1 - 0.25*0.312) * 0.5, # 25% effectiveness of hiud, Ref (Bofill Rodriguez, 2022)
+# calculate par value which is fed into logistic regression
+# Odds with intervention: 1/(1+exp(-(0+intercept)))=odds_intervention
+# i.e. to get the intercept from the odds, we calculate: -np.log(1/odds_intervention -1) - intercept_base
+intercept_base = np.log(1/odds_hmb_base -1),
+intercept_hiud = -np.log(1/odds_hmb_hiud -1) - intercept_base,
+intercept_txa = -np.log(1/odds_hmb_txa -1) - intercept_base,
+intercept_pill = -np.log(1/odds_hmb_pill -1) - intercept_base,
+"""
+
 
 class Menstruation(ss.Connector):
     """
@@ -34,26 +51,15 @@ class Menstruation(ss.Connector):
             # --- HMB prediction
             # Proportion of menstruating women who experience HMB (sans interventions)
             p_hmb_prone=ss.bernoulli(p=0.486),  
-            # define desired odds of hmb, given intervention
-            odds_hmb_base = 0.5, # assumption
-            odds_hmb_hiud =  (1-0.312) * 0.5, # Ref (Park, 2015)
-            odds_hmb_txa = (1 - 0.5*0.312) * 0.5, # 50% effectiveness of hiud, Ref (Bofill Rodriguez, 2022)
-            odds_hmb_pill = (1 - 0.25*0.312) * 0.5, # 25% effectiveness of hiud, Ref (Bofill Rodriguez, 2022)
-            # calculate par value which is fed into logistic regression
-            # Odds with intervention: 1/(1+exp(-(0+intercept)))=odds_intervention
-            # i.e. to get the intercept from the odds, we calculate: -np.log(1/odds_intervention -1) - intercept_base
-            intercept_base = np.log(1/self.odds_hmb_base -1),
-            intercept_hiud = -np.log(1/self.odds_hmb_hiud -1) - self.intercept_base,
-            intercept_txa = -np.log(1/self.odds_hmb_txa -1) - self.intercept_base,
-            intercept_pill = -np.log(1/self.odds_hmb_pill -1) - self.intercept_base,
+            
             
             hmb_pred=sc.objdict(  # Parameters for HMB prediction
                 # Baseline odds that those prone to HMB will experience it this timestep
                 # This is converted to an intercept in the logistic regression: -np.log(1/base-1)
                 base=0.5,
-                pill=self.intercept_pill,
-                hiud=self.intercept_hiud,
-                txa=self.intercept_txa,
+                pill = -np.log(1/((1 - 0.25*0.312) * 0.5) -1) - np.log(1/0.5 -1),
+                hiud = -np.log(1/((1-0.312) * 0.5) -1) - np.log(1/0.5 -1),
+                txa = -np.log(1/((1 - 0.5*0.312) * 0.5) -1) - np.log(1/0.5 -1),
             ),
 
             # Non-permanent sequelae of HMB
