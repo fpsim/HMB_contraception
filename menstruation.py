@@ -7,6 +7,8 @@ import sciris as sc
 import starsim as ss
 
 
+
+
 class Menstruation(ss.Connector):
     """
     Class to handle menstruation related events
@@ -19,33 +21,39 @@ class Menstruation(ss.Connector):
         self.define_pars(
             unit='month',
             
-            # Menses
+            # --- Menses
             age_menses=ss.lognorm_ex(14, 3),  # Age of menarche
             age_menopause=ss.normal(50, 3),  # Age of menopause
             eff_hyst_menopause=ss.normal(-5, 1),  # Adjustment for age of menopause if hysterectomy occurs
 
+            # --- Prob of hormonal IUD
             # The probability of IUD usage is set within FPsim, so this parameter just
             # determines whether each woman is a hormonal or non-hormonal IUD user
             p_hiud=ss.bernoulli(p=0.17),
 
-            # HMB prediction
-            # TODO: consider replacing this binary variable (HMB yes/now) with a continuous one representing blood loss
-            p_hmb_prone=ss.bernoulli(p=0.486),  # Proportion of menstruating women who experience HMB (sans interventions)
+            # --- HMB prediction
+            # Proportion of menstruating women who experience HMB (sans interventions)
+            p_hmb_prone=ss.bernoulli(p=0.486),  
+            # define desired odds of hmb, given intervention
+            odds_hmb_base = 0.5, # assumption
+            odds_hmb_hiud =  (1-0.312) * 0.5, # Ref (Park, 2015)
+            odds_hmb_txa = (1 - 0.5*0.312) * 0.5, # 50% effectiveness of hiud, Ref (Bofill Rodriguez, 2022)
+            odds_hmb_pill = (1 - 0.25*0.312) * 0.5, # 25% effectiveness of hiud, Ref (Bofill Rodriguez, 2022)
+            # calculate par value which is fed into logistic regression
+            # Odds with intervention: 1/(1+exp(-(0+intercept)))=odds_intervention
+            # i.e. to get the intercept from the odds, we calculate: -np.log(1/odds_intervention -1) - intercept_base
+            intercept_base = np.log(1/self.odds_hmb_base -1),
+            intercept_hiud = -np.log(1/self.odds_hmb_hiud -1) - self.intercept_base,
+            intercept_txa = -np.log(1/self.odds_hmb_txa -1) - self.intercept_base,
+            intercept_pill = -np.log(1/self.odds_hmb_pill -1) - self.intercept_base,
+            
             hmb_pred=sc.objdict(  # Parameters for HMB prediction
                 # Baseline odds that those prone to HMB will experience it this timestep
                 # This is converted to an intercept in the logistic regression: -np.log(1/base-1)
                 base=0.5,
-                # Effect of hormonal pill on HMB - placeholder.
-                # Interpretation: baseline odds without pill is 0.5
-                # Odds with pill is 1/(1+exp(-(0-3)))=0.047, i.e. reduces odds by ~90%
-                pill=-3,
-                # Effect of IUD on HMB - placeholder
-                # Interpretation: baseline odds without pill is 1/(1+exp(-(0)))=0.5
-                # Odds with IUD is 1/(1+exp(-(0-10)))=0.000045, i.e. reduces odds by ~99%
-                hiud=-10,
-                # Effect of tranexamic acid on HMB - placeholder
-                # Odds with TX is 1/(1+exp(-(0-2)))=0.119, i.e. reduces odds by ~76%
-                txa=-2,
+                pill=self.intercept_pill,
+                hiud=self.intercept_hiud,
+                txa=self.intercept_txa,
             ),
 
             # Non-permanent sequelae of HMB
