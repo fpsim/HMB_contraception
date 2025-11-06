@@ -189,7 +189,7 @@ if __name__ == '__main__':
             s_pill30['pars']['interventions'] = [contra_hmb(prob=0.0), txa(prob=0.), pill_hmb(prob=0.3)]
 
             m = ss.parallel([s_base, s_i10, s_i30, s_hiud30, s_txa30, s_pill30], 
-                            parallel=True)
+                            parallel=False)
             s_base, s_i10, s_i30, s_hiud30, s_txa30, s_pill30 = m.sims[:]  # Replace with run versions
             # Save results
             sc.saveobj('results/kenya_base.sim', s_base)
@@ -214,6 +214,8 @@ if __name__ == '__main__':
         si = sc.findfirst(years, 2020)
         years = years[si:]
         set_font(20)
+        
+        # --- make plot
         fig, axes = pl.subplots(2, 3, figsize=(15, 9))
         axes = axes.ravel()
 
@@ -241,6 +243,42 @@ if __name__ == '__main__':
             ax.set_ylim(bottom=0)
             if i in [0, 3]:
                 ax.set_ylabel('Prevalence (%)')
+        # Make an empty final axis
+        #ax = axes[5]
+        axes[5].axis('off')
+        axes[0].legend(fontsize=16, frameon=False, loc='upper left')
+        sc.figlayout()
+        sc.savefig('figures/hmb_scenario_results_3-interventions.png', dpi=150)
+        
+        
+        # --- same plot but with y-axes 0-100
+        fig, axes = pl.subplots(2, 3, figsize=(15, 9))
+        axes = axes.ravel()
+
+        res_to_plot = ['hiud', 'hmb', 'poor_mh', 'anemic', 'pain']
+        labels = ['hIUD Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain']
+
+        for i, res in enumerate(res_to_plot):
+            ax = axes[i]
+            r0 = s_base.results.menstruation[f'{res}_prev']
+            y0 = r0[::12][si:]
+            y10 = s_i10.results.menstruation[f'{res}_prev'][::12][si:]
+            y30 = s_i30.results.menstruation[f'{res}_prev'][::12][si:]
+            yhiud30 = s_hiud30.results.menstruation[f'{res}_prev'][::12][si:]
+            ytxa30 = s_txa30.results.menstruation[f'{res}_prev'][::12][si:]
+            ypill30 = s_pill30.results.menstruation[f'{res}_prev'][::12][si:]
+            ax.plot(years, y0*100, label='Baseline')
+            ax.plot(years, y10*100, label='hIUD+TXA+pill, 10% uptake each')
+            ax.plot(years, y30*100, label='hIUD+TXA+pill 30% uptake each')
+            ax.plot(years, yhiud30*100, label='hIUD 30% uptake')
+            ax.plot(years, ytxa30*100, label='TXA 30% uptake')
+            ax.plot(years, ypill30*100, label='pill 30% uptake')
+            # ax.set_xticks(years[::2])
+            ax.axvline(x=2026, color='k', ls='--')
+            ax.set_title(labels[i])
+            ax.set_ylim(bottom=0, top=100)
+            if i in [0, 3]:
+                ax.set_ylabel('Prevalence (%)')
 
         # Make an empty final axis
         #ax = axes[5]
@@ -248,5 +286,5 @@ if __name__ == '__main__':
 
         axes[0].legend(fontsize=16, frameon=False, loc='upper left')
         sc.figlayout()
-        sc.savefig('figures/hmb_scenario_results_3-interventions.png', dpi=150)
+        sc.savefig('figures/hmb_scenario_results_3-interventions_y-axis-scaled-0-100.png', dpi=150)
 
