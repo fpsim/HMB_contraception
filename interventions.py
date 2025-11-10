@@ -9,7 +9,10 @@ import sciris as sc
 import pandas as pd
 from menstruation import Menstruation
 from education import Education
- 
+import numpy as np
+
+
+
 
 class IUD(ss.Intervention):
     """
@@ -25,43 +28,54 @@ class IUD(ss.Intervention):
         if self.t.now() >= self.start:
             self.sim.diseases.menstruation.pars.p_iud.set(self.new_val)
         return
-
-
+  
 class contra_hmb(ss.Intervention):
     def __init__(self, pars=None, eligibility=None, **kwargs):
         super().__init__(name='contra_hmb', eligibility=eligibility)
         self.define_pars(
             year=2026,  # When to apply the intervention
-            prob=ss.bernoulli(p=0.5),  # Proportion of HMB-prone non-users who will accept
+            prob_offer=ss.bernoulli(p=0.1),  # Proportion of eligible people who are offered
+            prob_accept=ss.bernoulli(p=0.5),  # Proportion of those offered who accept
         )
         self.update_pars(pars, **kwargs)
         if eligibility is None:
             self.eligibility = lambda sim: (
                     sim.people.menstruation.hmb_prone &
                     sim.people.menstruation.menstruating &
-                    # ~sim.people.on_contra &
                     ~sim.people.fp.pregnant)
         self.define_states(
-            ss.State('intervention_applied', label="Received hIUD through intervention"),
+            ss.BoolState('intervention_applied', label="Received hIUD through intervention"),
+            ss.BoolState('contra_hmb_offered', label="Was offered contra HMB intervention"),
+            ss.BoolState('contra_hmb_accepted', label="Accepted contra HMB intervention"),
         )
         return
-
+    
     @property
     def iud_idx(self):
         """ Get the index of the IUD method """
         return self.sim.connectors.contraception.get_method_by_label('IUDs').idx
-
+    
     def step(self):
         sim = self.sim
         if sim.t.now() == self.pars.year:
-            # Print message
-            print(f'Offering hIUD for HMB!')
+            print('Offering hIUD for HMB!')
 
-            # Get women who accept the intervention package
+            # Step 1: Get eligible people
             elig_uids = self.check_eligibility()
-            accept_uids = self.pars.prob.filter(elig_uids)
+            print(f"Eligible for intervention: {len(elig_uids)}")
+            
+            # Step 2: Randomly select 10% to be offered the intervention
+            offered_uids = self.pars.prob_offer.filter(elig_uids)
+            self.contra_hmb_offered[offered_uids] = True
+            print(f"Offered intervention: {len(offered_uids)}")
+            
+            # Step 3: Of those offered, 50% accept
+            accept_uids = self.pars.prob_accept.filter(offered_uids)
+            self.contra_hmb_accepted[accept_uids] = True
+            print(f"Accepted intervention: {len(accept_uids)}")
 
-            # Adjust their contraception method
+            # Step 4: Apply the intervention to those who accepted
+            # adjust contraceptive method
             sim.people.fp.method[accept_uids] = self.iud_idx
             sim.people.fp.on_contra[accept_uids] = True
             sim.people.fp.ever_used_contra[accept_uids] = True
@@ -71,6 +85,7 @@ class contra_hmb(ss.Intervention):
             sim.people.menstruation.hiud_prone[accept_uids] = 1
 
             self.intervention_applied[accept_uids] = True
+            
         return
 
 
@@ -79,8 +94,9 @@ class txa(ss.Intervention):
         super().__init__(name='txa', eligibility=eligibility)
         self.define_pars(
             year=2026,  # When to apply the intervention
-            prob=ss.bernoulli(p=0.5),  # Proportion of HMB-prone non-users who will accept
-        )
+            prob_offer=ss.bernoulli(p=0.1),  # Proportion of eligible people who are offered
+            prob_accept=ss.bernoulli(p=0.5),  # Proportion of those offered who accept        
+            )
         self.update_pars(pars, **kwargs)
         if eligibility is None:
             self.eligibility = lambda sim: (
@@ -89,7 +105,9 @@ class txa(ss.Intervention):
                     # ~sim.people.on_contra &
                     ~sim.people.fp.pregnant)
         self.define_states(
-            ss.State('intervention_applied', label="Received TXA through intervention"),
+            ss.BoolState('intervention_applied', label="Received TXA through intervention"),
+            ss.BoolState('txa_offered', label="Was offered TXA"),
+            ss.BoolState('txa_accepted', label="Accepted TXA"),
         )
         return
 
@@ -97,15 +115,27 @@ class txa(ss.Intervention):
         sim = self.sim
         if sim.t.now() == self.pars.year:
             # Print message
-            print(f'Offering TXA for HMB')
+            print('Offering TXA for HMB')
 
-            # Get women who accept the intervention package
+            # Step 1: Get eligible people
             elig_uids = self.check_eligibility()
-            accept_uids = self.pars.prob.filter(elig_uids)
+            print(f"Eligible for intervention: {len(elig_uids)}")
             
-            # update txa status
-            sim.diseases.menstruation.txa[accept_uids] = True
+            # Step 2: Randomly select 10% to be offered the intervention
+            offered_uids = self.pars.prob_offer.filter(elig_uids)
+            self.txa_offered[offered_uids] = True
+            print(f"Offered intervention: {len(offered_uids)}")
+            
+            # Step 3: Of those offered, 50% accept
+            accept_uids = self.pars.prob_accept.filter(offered_uids)
+            self.txa_accepted[accept_uids] = True
+            print(f"Accepted intervention: {len(accept_uids)}")
+        
+            # Step 4: Apply the intervention to those who accepted            
+            sim.people.menstruation.txa[accept_uids] = True
             self.intervention_applied[accept_uids] = True
+            
+            # todo: change contraceptive method and/or eligibility requires on non-hormonal contraceptive method
         return
 
 
@@ -115,8 +145,9 @@ class pill_hmb(ss.Intervention):
         super().__init__(name='pill_hmb', eligibility=eligibility)
         self.define_pars(
             year=2026,  # When to apply the intervention
-            prob=ss.bernoulli(p=0.5),  # Proportion of HMB-prone non-users who will accept
-        )
+            prob_offer=ss.bernoulli(p=0.1),  # Proportion of eligible people who are offered
+            prob_accept=ss.bernoulli(p=0.5),  # Proportion of those offered who accept        
+            )
         self.update_pars(pars, **kwargs)
         if eligibility is None:
             self.eligibility = lambda sim: (
@@ -125,26 +156,39 @@ class pill_hmb(ss.Intervention):
                     # ~sim.people.on_contra &
                     ~sim.people.fp.pregnant)
         self.define_states(
-            ss.State('intervention_applied', label="Received pill through intervention"),
+            ss.BoolState('intervention_applied', label="Received pill through intervention"),
+            ss.BoolState('pill_offered', label="Was offered TXA"),
+            ss.BoolState('pill_accepted', label="Accepted TXA"),
         )
         return
 
     @property
     def pill_idx(self):
         """ Get the index of the pill method """
-        return self.sim.connectors.contraception.get_method_by_label('pill').idx
+        return self.sim.connectors.contraception.get_method_by_label('Pill').idx
 
     def step(self):
         sim = self.sim
         if sim.t.now() == self.pars.year:
             # Print message
             print(f'Offering pill for HMB!')
-
-            # Get women who accept the intervention package
+            
+            # Step 1: Get eligible people
             elig_uids = self.check_eligibility()
-            accept_uids = self.pars.prob.filter(elig_uids)
-
-            # Adjust their contraception method
+            print(f"Eligible for intervention: {len(elig_uids)}")
+            
+            # Step 2: Randomly select 10% to be offered the intervention
+            offered_uids = self.pars.prob_offer.filter(elig_uids)
+            self.pill_offered[offered_uids] = True
+            print(f"Offered intervention: {len(offered_uids)}")
+            
+            # Step 3: Of those offered, 50% accept
+            accept_uids = self.pars.prob_accept.filter(offered_uids)
+            self.pill_accepted[accept_uids] = True
+            print(f"Accepted intervention: {len(accept_uids)}")
+        
+            # Step 4: Apply the intervention to those who accepted              
+            # adjust contraception method
             sim.people.fp.method[accept_uids] = self.pill_idx
             sim.people.fp.on_contra[accept_uids] = True
             sim.people.fp.ever_used_contra[accept_uids] = True
@@ -154,3 +198,132 @@ class pill_hmb(ss.Intervention):
 
             self.intervention_applied[accept_uids] = True
         return
+
+    
+
+
+class hmb_package(ss.Intervention):
+    """
+    Package intervention that offers contraception, TXA, and pill sequentially
+    to the same proportion of the eligible population
+    """
+    def __init__(self, pars=None, eligibility=None, **kwargs):
+        super().__init__(name='hmb_package', eligibility=eligibility)
+        self.define_pars(
+            year=2026,
+            prob_offer=ss.bernoulli(p=0.2),  # 20% offered the package
+            prob_accept_contra=ss.bernoulli(p=0.5),  # 50% accept contraception
+            prob_accept_txa=ss.bernoulli(p=0.5),  # 50% accept TXA
+            prob_accept_pill=ss.bernoulli(p=0.5),  # 50% accept pill
+        )
+        self.update_pars(pars, **kwargs)
+        if eligibility is None:
+            self.eligibility = lambda sim: (
+                    sim.people.menstruation.hmb_prone &
+                    sim.people.menstruation.menstruating &
+                    ~sim.people.fp.pregnant)
+        self.define_states(
+            ss.BoolState('package_offered', label="Was offered HMB package"),
+            ss.BoolState('contra_offered', label="Was offered contraception"),
+            ss.BoolState('contra_accepted', label="Accepted contraception"),
+            ss.BoolState('txa_offered', label="Was offered TXA"),
+            ss.BoolState('txa_accepted', label="Accepted TXA"),
+            ss.BoolState('pill_offered', label="Was offered pill"),
+            ss.BoolState('pill_accepted', label="Accepted pill"),
+        )
+        return
+    
+    @property
+    def iud_idx(self):
+        return self.sim.connectors.contraception.get_method_by_label('IUDs').idx
+    
+    @property
+    def pill_idx(self):
+        return self.sim.connectors.contraception.get_method_by_label('Pill').idx
+    
+    def step(self):
+        sim = self.sim
+        if sim.t.now() == self.pars.year:
+            print('Offering HMB intervention package!')
+            
+            # Step 1: Get eligible people
+            elig_uids = self.check_eligibility()
+            print(f"Eligible for package: {len(elig_uids)}")
+            
+            # Step 2: Select 20% to offer the package
+            package_offered_uids = self.pars.prob_offer.filter(elig_uids)
+            self.package_offered[package_offered_uids] = True
+            print(f"Offered package: {len(package_offered_uids)}")
+            
+            # Step 3: Offer contraception to all in the package
+            self.contra_offered[package_offered_uids] = True
+            contra_accept_uids = self.pars.prob_accept_contra.filter(package_offered_uids)
+            self.contra_accepted[contra_accept_uids] = True
+            print(f"Accepted contraception: {len(contra_accept_uids)}")
+            
+            # Apply contraception
+            sim.people.fp.method[contra_accept_uids] = self.iud_idx
+            sim.people.fp.on_contra[contra_accept_uids] = True
+            sim.people.fp.ever_used_contra[contra_accept_uids] = True
+            method_dur = sim.connectors.contraception.set_dur_method(contra_accept_uids)
+            sim.people.fp.ti_contra[contra_accept_uids] = self.ti + method_dur
+            sim.people.menstruation.hiud_prone[contra_accept_uids] = 1
+            
+            # Step 4: Offer TXA to those who declined contraception
+            contra_declined_uids = np.setdiff1d(package_offered_uids, contra_accept_uids)
+            self.txa_offered[contra_declined_uids] = True
+            txa_accept_uids = self.pars.prob_accept_txa.filter(contra_declined_uids)
+            self.txa_accepted[txa_accept_uids] = True
+            print(f"Offered TXA: {len(contra_declined_uids)}, Accepted: {len(txa_accept_uids)}")
+            
+            # Apply TXA
+            sim.people.menstruation.txa[txa_accept_uids] = True
+            
+            # Step 5: Offer pill to those who declined both contraception and TXA
+            txa_declined_uids = np.setdiff1d(contra_declined_uids, txa_accept_uids)
+            self.pill_offered[txa_declined_uids] = True
+            pill_accept_uids = self.pars.prob_accept_pill.filter(txa_declined_uids)
+            self.pill_accepted[pill_accept_uids] = True
+            print(f"Offered pill: {len(txa_declined_uids)}, Accepted: {len(pill_accept_uids)}")
+            
+            # Apply pill
+            sim.people.fp.method[pill_accept_uids] = self.pill_idx
+            sim.people.fp.on_contra[pill_accept_uids] = True
+            sim.people.fp.ever_used_contra[pill_accept_uids] = True
+            method_dur = sim.connectors.contraception.set_dur_method(pill_accept_uids)
+            sim.people.fp.ti_contra[pill_accept_uids] = self.ti + method_dur
+            
+            # Summary
+            total_accepted = len(contra_accept_uids) + len(txa_accept_uids) + len(pill_accept_uids)
+            print(f"Total who accepted any intervention: {total_accepted}")
+            print(f"  Contraception: {len(contra_accept_uids)}")
+            print(f"  TXA: {len(txa_accept_uids)}")
+            print(f"  Pill: {len(pill_accept_uids)}")
+            print(f"  None: {len(package_offered_uids) - total_accepted}")
+            
+        return
+
+
+
+                
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

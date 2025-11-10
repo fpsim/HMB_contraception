@@ -3,15 +3,22 @@ Script to create a model of Kenya, modify some parameters, run the model and gen
 discrepancies between the model and data.
 """
 
+
 import numpy as np
-import fpsim as fp
-from fpsim import plotting as plt
 import pandas as pd
-from menstruation import Menstruation
-from education import Education
-import starsim as ss
 import pylab as pl
 import sciris as sc
+# starsim
+import starsim as ss
+# fpsim
+import fpsim as fp
+from fpsim import plotting as plt
+# hmb
+from menstruation import Menstruation
+from education import Education
+from interventions import contra_hmb, txa, pill_hmb
+
+
 
 # Settings
 country = 'kenya'
@@ -181,7 +188,6 @@ if __name__ == '__main__':
             # only pill
             s_pill30 = make_sim(stop=2032)
             
-            from interventions import contra_hmb, txa, pill_hmb
             s_i10['pars']['interventions'] = [contra_hmb(prob=0.1), txa(prob=0.1), pill_hmb(prob=0.1)]
             s_i30['pars']['interventions'] = [contra_hmb(prob=0.3), txa(prob=0.3), pill_hmb(prob=0.3)]
             s_hiud30['pars']['interventions'] = [contra_hmb(prob=0.3), txa(prob=0.), pill_hmb(prob=0.)]
