@@ -29,9 +29,9 @@ class IUD(ss.Intervention):
             self.sim.diseases.menstruation.pars.p_iud.set(self.new_val)
         return
   
-class contra_hmb(ss.Intervention):
+class hiud_hmb(ss.Intervention):
     def __init__(self, pars=None, eligibility=None, **kwargs):
-        super().__init__(name='contra_hmb', eligibility=eligibility)
+        super().__init__(name='hiud_hmb', eligibility=eligibility)
         self.define_pars(
             year=2026,  # When to apply the intervention
             prob_offer=ss.bernoulli(p=0.1),  # Proportion of eligible people who are offered
@@ -45,8 +45,8 @@ class contra_hmb(ss.Intervention):
                     ~sim.people.fp.pregnant)
         self.define_states(
             ss.BoolState('intervention_applied', label="Received hIUD through intervention"),
-            ss.BoolState('contra_hmb_offered', label="Was offered contra HMB intervention"),
-            ss.BoolState('contra_hmb_accepted', label="Accepted contra HMB intervention"),
+            ss.BoolState('hiud_offered', label="Was offered hIUD"),
+            ss.BoolState('hiud_accepted', label="Accepted hIUD"),
         )
         return
     
@@ -66,12 +66,12 @@ class contra_hmb(ss.Intervention):
             
             # Step 2: Randomly select 10% to be offered the intervention
             offered_uids = self.pars.prob_offer.filter(elig_uids)
-            self.contra_hmb_offered[offered_uids] = True
+            self.hiud_offered[offered_uids] = True
             print(f"Offered intervention: {len(offered_uids)}")
             
             # Step 3: Of those offered, 50% accept
             accept_uids = self.pars.prob_accept.filter(offered_uids)
-            self.contra_hmb_accepted[accept_uids] = True
+            self.hiud_accepted[accept_uids] = True
             print(f"Accepted intervention: {len(accept_uids)}")
 
             # Step 4: Apply the intervention to those who accepted
@@ -171,7 +171,7 @@ class pill_hmb(ss.Intervention):
         sim = self.sim
         if sim.t.now() == self.pars.year:
             # Print message
-            print(f'Offering pill for HMB!')
+            print('Offering pill for HMB!')
             
             # Step 1: Get eligible people
             elig_uids = self.check_eligibility()
@@ -204,15 +204,15 @@ class pill_hmb(ss.Intervention):
 
 class hmb_package(ss.Intervention):
     """
-    Package intervention that offers contraception, TXA, and pill sequentially
-    to the same proportion of the eligible population
+    Intervention package that offers hIUD, TXA, and pill sequentially
+    to a proportion of the eligible population
     """
     def __init__(self, pars=None, eligibility=None, **kwargs):
         super().__init__(name='hmb_package', eligibility=eligibility)
         self.define_pars(
             year=2026,
             prob_offer=ss.bernoulli(p=0.2),  # 20% offered the package
-            prob_accept_contra=ss.bernoulli(p=0.5),  # 50% accept contraception
+            prob_accept_hiud=ss.bernoulli(p=0.5),  # 50% accept contraception
             prob_accept_txa=ss.bernoulli(p=0.5),  # 50% accept TXA
             prob_accept_pill=ss.bernoulli(p=0.5),  # 50% accept pill
         )
@@ -224,8 +224,8 @@ class hmb_package(ss.Intervention):
                     ~sim.people.fp.pregnant)
         self.define_states(
             ss.BoolState('package_offered', label="Was offered HMB package"),
-            ss.BoolState('contra_offered', label="Was offered contraception"),
-            ss.BoolState('contra_accepted', label="Accepted contraception"),
+            ss.BoolState('hiud_offered', label="Was offered hIUD"),
+            ss.BoolState('hiud_accepted', label="Accepted hIUD"),
             ss.BoolState('txa_offered', label="Was offered TXA"),
             ss.BoolState('txa_accepted', label="Accepted TXA"),
             ss.BoolState('pill_offered', label="Was offered pill"),
@@ -256,31 +256,31 @@ class hmb_package(ss.Intervention):
             print(f"Offered package: {len(package_offered_uids)}")
             
             # Step 3: Offer contraception to all in the package
-            self.contra_offered[package_offered_uids] = True
-            contra_accept_uids = self.pars.prob_accept_contra.filter(package_offered_uids)
-            self.contra_accepted[contra_accept_uids] = True
-            print(f"Accepted contraception: {len(contra_accept_uids)}")
+            self.hiud_offered[package_offered_uids] = True
+            hiud_accept_uids = self.pars.prob_accept_hiud.filter(package_offered_uids)
+            self.hiud_accepted[hiud_accept_uids] = True
+            print(f"Accepted hIUD: {len(hiud_accept_uids)}")
             
             # Apply contraception
-            sim.people.fp.method[contra_accept_uids] = self.iud_idx
-            sim.people.fp.on_contra[contra_accept_uids] = True
-            sim.people.fp.ever_used_contra[contra_accept_uids] = True
-            method_dur = sim.connectors.contraception.set_dur_method(contra_accept_uids)
-            sim.people.fp.ti_contra[contra_accept_uids] = self.ti + method_dur
-            sim.people.menstruation.hiud_prone[contra_accept_uids] = 1
+            sim.people.fp.method[hiud_accept_uids] = self.iud_idx
+            sim.people.fp.on_contra[hiud_accept_uids] = True
+            sim.people.fp.ever_used_contra[hiud_accept_uids] = True
+            method_dur = sim.connectors.contraception.set_dur_method(hiud_accept_uids)
+            sim.people.fp.ti_contra[hiud_accept_uids] = self.ti + method_dur
+            sim.people.menstruation.hiud_prone[hiud_accept_uids] = 1
             
-            # Step 4: Offer TXA to those who declined contraception
-            contra_declined_uids = np.setdiff1d(package_offered_uids, contra_accept_uids)
-            self.txa_offered[contra_declined_uids] = True
-            txa_accept_uids = self.pars.prob_accept_txa.filter(contra_declined_uids)
+            # Step 4: Offer TXA to those who declined hIUD
+            hiud_declined_uids = np.setdiff1d(package_offered_uids, hiud_accept_uids)
+            self.txa_offered[hiud_declined_uids] = True
+            txa_accept_uids = self.pars.prob_accept_txa.filter(hiud_declined_uids)
             self.txa_accepted[txa_accept_uids] = True
-            print(f"Offered TXA: {len(contra_declined_uids)}, Accepted: {len(txa_accept_uids)}")
+            print(f"Offered TXA: {len(hiud_declined_uids)}, Accepted: {len(txa_accept_uids)}")
             
             # Apply TXA
             sim.people.menstruation.txa[txa_accept_uids] = True
             
-            # Step 5: Offer pill to those who declined both contraception and TXA
-            txa_declined_uids = np.setdiff1d(contra_declined_uids, txa_accept_uids)
+            # Step 5: Offer pill to those who declined both hIUD and TXA
+            txa_declined_uids = np.setdiff1d(hiud_declined_uids, txa_accept_uids)
             self.pill_offered[txa_declined_uids] = True
             pill_accept_uids = self.pars.prob_accept_pill.filter(txa_declined_uids)
             self.pill_accepted[pill_accept_uids] = True
@@ -294,9 +294,9 @@ class hmb_package(ss.Intervention):
             sim.people.fp.ti_contra[pill_accept_uids] = self.ti + method_dur
             
             # Summary
-            total_accepted = len(contra_accept_uids) + len(txa_accept_uids) + len(pill_accept_uids)
+            total_accepted = len(hiud_accept_uids) + len(txa_accept_uids) + len(pill_accept_uids)
             print(f"Total who accepted any intervention: {total_accepted}")
-            print(f"  Contraception: {len(contra_accept_uids)}")
+            print(f"  hIUD: {len(hiud_accept_uids)}")
             print(f"  TXA: {len(txa_accept_uids)}")
             print(f"  Pill: {len(pill_accept_uids)}")
             print(f"  None: {len(package_offered_uids) - total_accepted}")
