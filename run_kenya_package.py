@@ -128,8 +128,9 @@ if __name__ == '__main__':
 
     to_run = [
          #'calib',
-         #'plot_hmb',  # Plot the HMB results
-         'run_scenario',  # Run a scenario with interventions
+         #'plot_hmb',  # plot the HMB results
+         # 'run_scenario',  # run a scenario with interventions
+         'run_stochastic', # run multiple iterations of scenarios
     ]
     do_run = True
 
@@ -385,7 +386,217 @@ if __name__ == '__main__':
 
 
 
-
+    if 'run_stochastic' in to_run:
+        # run the scenarios for multiple random seeds
+        n_seeds = 50 
+        
+        if do_run:
+            for seed in np.arange(n_seeds):
+                # --- set up simulations
+                # baseline - no intervention
+                s_base = make_sim(stop=2032)
+                s_base['pars']['rand_seed'] = seed
+    
+                # full package - 20 % of eligible pop
+                s_p20 = make_sim(stop=2032)
+                s_p20['pars']['interventions'] = [hmb_package(prob_offer=0.2, 
+                                                 prob_accept_hiud=0.5, 
+                                                 prob_accept_txa=0.5, 
+                                                 prob_accept_pill=0.5)]
+                s_p20['pars']['rand_seed'] = seed
+    
+                # full package - 40 % of eligible pop
+                s_p40 = make_sim(stop=2032)
+                s_p40['pars']['interventions'] = [hmb_package(prob_offer=0.4, 
+                                                 prob_accept_hiud=0.5, 
+                                                 prob_accept_txa=0.5, 
+                                                 prob_accept_pill=0.5)]
+                s_p40['pars']['rand_seed'] = seed
+                # full package - 60 % of eligible pop
+                s_p60 = make_sim(stop=2032)
+                s_p60['pars']['interventions'] = [hmb_package(prob_offer=0.6, 
+                                                 prob_accept_hiud=0.5, 
+                                                 prob_accept_txa=0.5, 
+                                                 prob_accept_pill=0.5)]
+                s_p60['pars']['rand_seed'] = seed
+                
+                # --- run the simulations
+                m = ss.parallel([s_base, 
+                                 s_p20, s_p40, s_p60], 
+                                parallel=False)
+                # replace sims with run versions
+                s_base, s_p20, s_p40, s_p60 = m.sims[:]  
+                
+                # --- save results
+                sc.saveobj(f'results_stochastic/kenya_package_base_seed{seed}.sim', s_base)
+                sc.saveobj(f'results_stochastic/kenya_package_package20_seed{seed}.sim', s_p20)
+                sc.saveobj(f'results_stochastic/kenya_package_package40_seed{seed}.sim', s_p40)
+                sc.saveobj(f'results_stochastic/kenya_package_package60_seed{seed}.sim', s_p60)
+    
+           
+    
+        
+        # --- aggregate results
+        
+        # Initialize dictionaries to store results for each scenario
+        scenarios = ['base', 'p20', 'p40', 'p60']
+        res_to_plot = ['hiud', 'hmb', 'poor_mh', 'anemic', 'pain']
+        
+        # Dictionary to store all runs
+        all_results = {scenario: {res: [] for res in res_to_plot} for scenario in scenarios}
+    
+        # load individual files
+        for seed in range(n_seeds):
+            s_base = sc.loadobj(f'results_stochastic/kenya_package_base_seed{seed}.sim')
+            s_p20 = sc.loadobj(f'results_stochastic/kenya_package_package20_seed{seed}.sim')
+            s_p40 = sc.loadobj(f'results_stochastic/kenya_package_package40_seed{seed}.sim')
+            s_p60 = sc.loadobj(f'results_stochastic/kenya_package_package60_seed{seed}.sim')
+            
+            sims = {'base': s_base, 'p20': s_p20, 'p40': s_p40, 'p60': s_p60}
+            
+            for scenario, sim in sims.items():
+                for res in res_to_plot:
+                    result = sim.results.menstruation[f'{res}_prev'][::12]
+                    all_results[scenario][res].append(result)
+        
+        # Convert to arrays and calculate statistics
+        stats = {scenario: {res: {} for res in res_to_plot} for scenario in scenarios}
+        
+        for scenario in scenarios:
+            for res in res_to_plot:
+                arr = np.array(all_results[scenario][res])  # Shape: (n_seeds, time_points)
+                stats[scenario][res]['mean'] = np.mean(arr, axis=0)
+                stats[scenario][res]['median'] = np.median(arr, axis=0)
+                stats[scenario][res]['lower'] = np.percentile(arr, 2.5, axis=0)
+                stats[scenario][res]['upper'] = np.percentile(arr, 97.5, axis=0)
+                stats[scenario][res]['q25'] = np.percentile(arr, 25, axis=0)
+                stats[scenario][res]['q75'] = np.percentile(arr, 75, axis=0)
+        
+        # Get time vector
+        t = s_base.results.menstruation.timevec[::12]
+        years = np.array([y.year for y in t])
+        si = sc.findfirst(years, 2020)
+        years = years[si:]
+        
+        set_font(20)
+        
+        # ---- PLOT: Stochastic results with uncertainty bands
+        fig, axes = pl.subplots(2, 3, figsize=(15, 9))
+        axes = axes.ravel()
+        
+        labels = ['hIUD Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain']
+        
+        # Define colors
+        colors = {
+            'p20': '#ffa500',    # orange
+            'p40': '#ff8c00',    # darker orange
+            'p60': '#ff6500',    # darkest orange
+            'base': '#6c757d',   # dark gray
+        }
+        
+        lw = 2.5  # line width
+        
+        for i, res in enumerate(res_to_plot):
+            ax = axes[i]
+            
+            # Plot each scenario with uncertainty bands
+            for scenario, color in colors.items():
+                mean = stats[scenario][res]['mean'][si:] * 100
+                lower = stats[scenario][res]['lower'][si:] * 100
+                upper = stats[scenario][res]['upper'][si:] * 100
+                
+                label_map = {
+                    'base': 'Baseline',
+                    'p20': 'Package 20% uptake',
+                    'p40': 'Package 40% uptake',
+                    'p60': 'Package 60% uptake'
+                }
+                
+                # Plot mean line
+                ax.plot(years, mean, label=label_map[scenario], color=color, linewidth=lw)
+                # Plot uncertainty band (95% CI)
+                ax.fill_between(years, lower, upper, color=color, alpha=0.2)
+            
+            # Add vertical line with label
+            ax.axvline(x=2026, color='k', ls='--', linewidth=1.5)
+            if i == 0:  # Add text label only to first panel
+                ax.text(2025.5, ax.get_ylim()[1] * 0.9, 'Start of\nintervention', 
+                       ha='right', va='top', fontsize=10, color='#4d4d4d')
+            
+            ax.set_title(labels[i])
+            ax.set_ylim(bottom=0)
+            
+            # Remove top and right spines
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            
+            if i in [0, 3]:
+                ax.set_ylabel('Prevalence (%)')
+            
+            if i >= 3:
+                ax.set_xlabel('Year')
+        
+        # Make an empty final axis and add legend there
+        axes[5].axis('off')
+        axes[5].legend(*axes[0].get_legend_handles_labels(), fontsize=16, frameon=False, loc='center')
+        
+        sc.figlayout()
+        sc.savefig('figures_stochastic/hmb_scenario-package_stochastic_results.png', dpi=150)
+        
+        
+        # ---- PLOT: Scaled 0-100 version
+        fig, axes = pl.subplots(2, 3, figsize=(15, 9))
+        axes = axes.ravel()
+        
+        for i, res in enumerate(res_to_plot):
+            ax = axes[i]
+            
+            # Plot each scenario with uncertainty bands
+            for scenario, color in colors.items():
+                mean = stats[scenario][res]['mean'][si:] * 100
+                lower = stats[scenario][res]['lower'][si:] * 100
+                upper = stats[scenario][res]['upper'][si:] * 100
+                
+                label_map = {
+                    'base': 'Baseline',
+                    'p20': 'Package 20% uptake',
+                    'p40': 'Package 40% uptake',
+                    'p60': 'Package 60% uptake'
+                }
+                
+                # Plot mean line
+                ax.plot(years, mean, label=label_map[scenario], color=color, linewidth=lw)
+                # Plot uncertainty band (95% CI)
+                ax.fill_between(years, lower, upper, color=color, alpha=0.2)
+            
+            # Add vertical line with label
+            ax.axvline(x=2026, color='k', ls='--', linewidth=1.5)
+            if i == 0:  # Add text label only to first panel
+                ax.text(2025.5, 20, 'Start of\nintervention', 
+                       ha='right', va='top', fontsize=10, color='#4d4d4d')
+            
+            ax.set_title(labels[i])
+            ax.set_ylim(bottom=0, top=100)
+            
+            # Remove top and right spines
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            
+            if i in [0, 3]:
+                ax.set_ylabel('Prevalence (%)')
+            
+            if i >= 3:
+                ax.set_xlabel('Year')
+        
+        # Make an empty final axis and add legend there
+        axes[5].axis('off')
+        axes[5].legend(*axes[0].get_legend_handles_labels(), fontsize=16, frameon=False, loc='center')
+        
+        sc.figlayout()
+        sc.savefig('figures_stochastic/hmb_scenario-package_stochastic_results_y-axis-scaled-0-100.png', dpi=150)
+        
+        # Save aggregated statistics
+        sc.saveobj('results_stochastic/aggregated_stats.obj', stats)
 
 
 
