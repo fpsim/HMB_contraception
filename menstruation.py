@@ -76,8 +76,8 @@ class Menstruation(ss.Connector):
                 #),
                 anemic=sc.objdict(  # Parameters for anemia
                     # This is converted to an intercept in the logistic regression: -np.log(1/base-1)
-                    base = 0.01,  # Baseline probability of anemia
-                    hmb = -np.log(1/0.0433 - 1) + np.log(1/0.01 - 1),
+                    base = 0.18,  # Baseline probability of anemia
+                    hmb = -np.log(1/0.35 - 1) + np.log(1/0.18 - 1),
                 ),
                 pain=sc.objdict(  # Parameters for menstrual pain
                     base = 0.1,  # Baseline probability of menstrual pain
@@ -150,7 +150,8 @@ class Menstruation(ss.Connector):
             ss.Result('anemic_prev', scale=False, label="Prevalence of anemia"),
             ss.Result('pain_prev', scale=False, label="Prevalence of menstrual pain"),
             ss.Result('hyst_prev', scale=False, label="Prevalence of hysterectomy"),
-            ss.Result('hiud_prev', scale=False, label="Prevalence of IUD usage"),
+            ss.Result('hiud_prev', scale=False, label="Prevalence of hIUD usage"),
+            ss.Result('pill_prev', scale=False, label="Prevalence of pill usage"),
             ss.Result('early_meno_prev', scale=False, label="Early menopause prevalence"),
             ss.Result('premature_meno_prev', scale=False, label="Premature menopause prevalence"),
         ]
@@ -300,7 +301,7 @@ class Menstruation(ss.Connector):
         ti = self.ti
         def count(arr): return np.count_nonzero(arr)
         def cond_prob(a, b): return sc.safedivide(count(a & b), count(b))
-        for res in ['hmb', 'poor_mh', 'anemic', 'pain', 'hiud', 'hyst', 'early_meno', 'premature_meno']:
+        for res in ['hmb', 'poor_mh', 'anemic', 'pain', 'hiud', 'hyst', 'early_meno', 'premature_meno', 'pill']:
             self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.menstruating)
         for res in ['hyst', 'early_meno', 'premature_meno']:
             self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.post_menarche)

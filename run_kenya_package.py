@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import pylab as pl
 import sciris as sc
+import os
 # starsim
 import starsim as ss
 # fpsim
@@ -22,12 +23,20 @@ from education import Education
 from interventions import hiud_hmb, txa, pill_hmb, hmb_package
 
 
+# set the output directories
+plotfolder = 'figures/'
+outfolder = 'results/'
 
+plotfolder_stochastic = 'figures_stochastic/'
+outfolder_stochastic = 'results_stochastic/'
 
+for ff in [plotfolder, outfolder, plotfolder_stochastic, outfolder_stochastic]:
+    if not os.path.exists(ff):
+        os.makedirs(ff)
 
 # Settings
 country = 'kenya'
-plt.Config.set_figs_directory('figures/')
+plt.Config.set_figs_directory(plotfolder)
 plt.Config.do_save = True
 plt.Config.do_show = False
 plt.Config.show_rmse = False
@@ -82,12 +91,13 @@ def make_sim(pars=None, stop=2021):
         analyzers=[fp.cpr_by_age(), fp.method_mix_by_age()],
         education_module=edu,
         connectors=[mens],
+        verbose=0.1,
     )
 
     return sim
 
 
-def plot_by_age(sim, do_save=True, figs_directory='figures'):
+def plot_by_age(sim, do_save=True, figs_directory=plotfolder):
 
     fig, ax = pl.subplots()
     age_bins = [18, 20, 25, 35, 50]
@@ -103,7 +113,7 @@ def plot_by_age(sim, do_save=True, figs_directory='figures'):
     ax.set_ylim([0, 1])
     ax.set_ylabel('CPR')
     ax.set_title('CPR')
-    if do_save: sc.savefig(f'{figs_directory}/cpr_by_age.png')
+    if do_save: sc.savefig(f'{figs_directory}cpr_by_age.png')
 
     # fig, ax = pl.subplots()
     # df = pd.DataFrame(sim.analyzers.method_mix_by_age.results)
@@ -129,7 +139,7 @@ if __name__ == '__main__':
     to_run = [
          #'calib',
          #'plot_hmb',  # plot the HMB results
-         # 'run_scenario',  # run a scenario with interventions
+         'run_scenario',  # run a scenario with interventions
          'run_stochastic', # run multiple iterations of scenarios
     ]
     do_run = True
@@ -151,7 +161,7 @@ if __name__ == '__main__':
 
 
     if 'plot_hmb' in to_run:
-        sim = sc.loadobj('results/kenya_calib.sim')
+        sim = sc.loadobj(outfolder+'kenya_calib.sim')
 
         #import numpy as np
         t = sim.results.menstruation.timevec[::12]  # Take every 12th time point for speed
@@ -176,7 +186,7 @@ if __name__ == '__main__':
 
         pl.legend(fontsize=16, frameon=False, loc='upper left')
         sc.figlayout()
-        sc.savefig('figures/hmb_results.png', dpi=150)
+        sc.savefig(plotfolder+'hmb_results.png', dpi=150)
 
 
     if 'run_scenario' in to_run:
@@ -216,27 +226,27 @@ if __name__ == '__main__':
             # --- run the simulations
             m = ss.parallel([s_base, s_hiud30, s_txa30, s_pill30, 
                              s_p20, s_p40, s_p60], 
-                            parallel=False)
+                            parallel=False, verbose=0)
             # replace sims with run versions
             s_base, s_hiud30, s_txa30, s_pill30, s_p20, s_p40, s_p60 = m.sims[:]  
             
             # --- save results
-            sc.saveobj('results/kenya_package_base.sim', s_base)
-            sc.saveobj('results/kenya_package_hiud30.sim', s_hiud30)
-            sc.saveobj('results/kenya_package_txa30.sim', s_txa30)
-            sc.saveobj('results/kenya_package_pill30.sim', s_pill30)
-            sc.saveobj('results/kenya_package_package20.sim', s_p20)
-            sc.saveobj('results/kenya_package_package40.sim', s_p40)
-            sc.saveobj('results/kenya_package_package60.sim', s_p60)
+            sc.saveobj(outfolder+'kenya_package_base.sim', s_base)
+            sc.saveobj(outfolder+'kenya_package_hiud30.sim', s_hiud30)
+            sc.saveobj(outfolder+'kenya_package_txa30.sim', s_txa30)
+            sc.saveobj(outfolder+'kenya_package_pill30.sim', s_pill30)
+            sc.saveobj(outfolder+'kenya_package_package20.sim', s_p20)
+            sc.saveobj(outfolder+'kenya_package_package40.sim', s_p40)
+            sc.saveobj(outfolder+'kenya_package_package60.sim', s_p60)
 
         else:
-            s_base = sc.loadobj('results/kenya_package_base.sim')
-            s_hiud30 = sc.loadobj('results/kenya_package_hiud30.sim')
-            s_txa30 = sc.loadobj('results/kenya_package_txa30.sim')
-            s_pill30 = sc.loadobj('results/kenya_package_pill30.sim')
-            s_p20 = sc.loadobj('results/kenya_package_package20.sim')
-            s_p40 = sc.loadobj('results/kenya_package_package40.sim')
-            s_p60 = sc.loadobj('results/kenya_package_package60.sim')
+            s_base = sc.loadobj(outfolder+'kenya_package_base.sim')
+            s_hiud30 = sc.loadobj(outfolder+'kenya_package_hiud30.sim')
+            s_txa30 = sc.loadobj(outfolder+'kenya_package_txa30.sim')
+            s_pill30 = sc.loadobj(outfolder+'kenya_package_pill30.sim')
+            s_p20 = sc.loadobj(outfolder+'kenya_package_package20.sim')
+            s_p40 = sc.loadobj(outfolder+'kenya_package_package40.sim')
+            s_p60 = sc.loadobj(outfolder+'kenya_package_package60.sim')
 
 
 
@@ -254,8 +264,8 @@ if __name__ == '__main__':
         fig, axes = pl.subplots(2, 3, figsize=(15, 9))
         axes = axes.ravel()
         
-        res_to_plot = ['hiud', 'hmb', 'poor_mh', 'anemic', 'pain']
-        labels = ['hIUD Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain']
+        res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic', 'pain']
+        labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain']
         
         # Define colors
         colors = {
@@ -307,12 +317,18 @@ if __name__ == '__main__':
             if i in [0, 3]:
                 ax.set_ylabel('Prevalence (%)')
         
-        # Make an empty final axis and add legend there
-        axes[5].axis('off')
-        axes[5].legend(*axes[0].get_legend_handles_labels(), fontsize=16, frameon=False, loc='center')
+        sc.figlayout(fig=fig, tight=False)
+        pl.subplots_adjust(right=0.85, hspace=0.35)  # Make room on the right
         
-        sc.figlayout()
-        sc.savefig('figures/hmb_scenario-package_results_3-interventions.png', dpi=150)
+        # THEN add the legend
+        handles, labels_legend = axes[0].get_legend_handles_labels()
+        fig.legend(handles, labels_legend, 
+                   loc='center left', 
+                   bbox_to_anchor=(0.87, 0.25),
+                   fontsize=14, 
+                   frameon=False)
+
+        sc.savefig(plotfolder+'hmb_scenario-package_results_3-interventions.png', dpi=150)
         
         
         
@@ -374,13 +390,18 @@ if __name__ == '__main__':
             if i in [0, 3]:
                 ax.set_ylabel('Prevalence (%)')
         
-        # Make an empty final axis and add legend there
-        axes[5].axis('off')
-        axes[5].legend(*axes[0].get_legend_handles_labels(), fontsize=16, frameon=False, loc='center')
+        sc.figlayout(fig=fig, tight=False)
+        pl.subplots_adjust(right=0.85, hspace=0.35)  # Make room on the right
         
-        sc.figlayout()
+        # THEN add the legend
+        handles, labels_legend = axes[0].get_legend_handles_labels()
+        fig.legend(handles, labels_legend, 
+                   loc='center left', 
+                   bbox_to_anchor=(0.87, 0.25),
+                   fontsize=14, 
+                   frameon=False)
         
-        sc.savefig('figures/hmb_scenario-package_results_3-interventions_y-axis-scaled-0-100.png', dpi=150)
+        sc.savefig(plotfolder+'hmb_scenario-package_results_3-interventions_y-axis-scaled-0-100.png', dpi=150)
 
 
 
@@ -396,7 +417,22 @@ if __name__ == '__main__':
                 # baseline - no intervention
                 s_base = make_sim(stop=2032)
                 s_base['pars']['rand_seed'] = seed
-    
+                
+                # only hIUD
+                s_hiud20 = make_sim(stop=2032)
+                s_hiud20['pars']['interventions'] = [hiud_hmb(prob_offer=0.2, prob_accept=0.5)]
+                s_hiud20['pars']['rand_seed'] = seed
+                
+                # only txa
+                s_txa20 = make_sim(stop=2032)
+                s_txa20['pars']['interventions'] = [txa(prob_offer=0.2, prob_accept=0.5)]
+                s_txa20['pars']['rand_seed'] = seed
+                
+                # only pill
+                s_pill20 = make_sim(stop=2032)
+                s_pill20['pars']['interventions'] = [pill_hmb(prob_offer=0.2, prob_accept=0.5)]
+                s_pill20['pars']['rand_seed'] = seed
+                
                 # full package - 20 % of eligible pop
                 s_p20 = make_sim(stop=2032)
                 s_p20['pars']['interventions'] = [hmb_package(prob_offer=0.2, 
@@ -421,17 +457,20 @@ if __name__ == '__main__':
                 s_p60['pars']['rand_seed'] = seed
                 
                 # --- run the simulations
-                m = ss.parallel([s_base, 
+                m = ss.parallel([s_base, s_hiud20, s_txa20, s_pill20,
                                  s_p20, s_p40, s_p60], 
                                 parallel=False)
                 # replace sims with run versions
-                s_base, s_p20, s_p40, s_p60 = m.sims[:]  
+                s_base, s_hiud20, s_txa20, s_pill20, s_p20, s_p40, s_p60 = m.sims[:]  
                 
                 # --- save results
-                sc.saveobj(f'results_stochastic/kenya_package_base_seed{seed}.sim', s_base)
-                sc.saveobj(f'results_stochastic/kenya_package_package20_seed{seed}.sim', s_p20)
-                sc.saveobj(f'results_stochastic/kenya_package_package40_seed{seed}.sim', s_p40)
-                sc.saveobj(f'results_stochastic/kenya_package_package60_seed{seed}.sim', s_p60)
+                sc.saveobj(outfolder_stochastic+f'kenya_package_base_seed{seed}.sim', s_base)
+                sc.saveobj(outfolder_stochastic+f'kenya_package_hiud-20_seed{seed}.sim', s_hiud20)
+                sc.saveobj(outfolder_stochastic+f'kenya_package_txa-20_seed{seed}.sim', s_txa20)
+                sc.saveobj(outfolder_stochastic+f'kenya_package_pill-20_seed{seed}.sim', s_pill20)
+                sc.saveobj(outfolder_stochastic+f'kenya_package_package20_seed{seed}.sim', s_p20)
+                sc.saveobj(outfolder_stochastic+f'kenya_package_package40_seed{seed}.sim', s_p40)
+                sc.saveobj(outfolder_stochastic+f'kenya_package_package60_seed{seed}.sim', s_p60)
     
            
     
@@ -439,7 +478,7 @@ if __name__ == '__main__':
         # --- aggregate results
         
         # Initialize dictionaries to store results for each scenario
-        scenarios = ['base', 'p20', 'p40', 'p60']
+        scenarios = ['base', 'hiud20', 'txa20', 'pill20', 'p20', 'p40', 'p60']
         res_to_plot = ['hiud', 'hmb', 'poor_mh', 'anemic', 'pain']
         
         # Dictionary to store all runs
@@ -447,12 +486,16 @@ if __name__ == '__main__':
     
         # load individual files
         for seed in range(n_seeds):
-            s_base = sc.loadobj(f'results_stochastic/kenya_package_base_seed{seed}.sim')
-            s_p20 = sc.loadobj(f'results_stochastic/kenya_package_package20_seed{seed}.sim')
-            s_p40 = sc.loadobj(f'results_stochastic/kenya_package_package40_seed{seed}.sim')
-            s_p60 = sc.loadobj(f'results_stochastic/kenya_package_package60_seed{seed}.sim')
+            s_base = sc.loadobj(outfolder_stochastic+f'kenya_package_base_seed{seed}.sim')
+            s_hiud20 = sc.loadobj(outfolder_stochastic+f'kenya_package_hiud-20_seed{seed}.sim')
+            s_txa20 = sc.loadobj(outfolder_stochastic+f'kenya_package_txa-20_seed{seed}.sim')
+            s_pill20 = sc.loadobj(outfolder_stochastic+f'kenya_package_pill-20_seed{seed}.sim')
+            s_p20 = sc.loadobj(outfolder_stochastic+f'kenya_package_package20_seed{seed}.sim')
+            s_p40 = sc.loadobj(outfolder_stochastic+f'kenya_package_package40_seed{seed}.sim')
+            s_p60 = sc.loadobj(outfolder_stochastic+f'kenya_package_package60_seed{seed}.sim')
             
-            sims = {'base': s_base, 'p20': s_p20, 'p40': s_p40, 'p60': s_p60}
+            sims = {'base': s_base, 'hiud20': s_hiud20, 'txa20': s_txa20, 'pill20': s_pill20, 
+                    'p20': s_p20, 'p40': s_p40, 'p60': s_p60}
             
             for scenario, sim in sims.items():
                 for res in res_to_plot:
@@ -489,6 +532,9 @@ if __name__ == '__main__':
         # Define colors
         colors = {
             'p20': '#ffa500',    # orange
+            'hiud20':  '#372248',    # dark purple
+            'txa20': '#3c6e71',     # teal
+            'pill20': '#8fbc8f',    # sage green
             'p40': '#ff8c00',    # darker orange
             'p60': '#ff6500',    # darkest orange
             'base': '#6c757d',   # dark gray
@@ -507,6 +553,9 @@ if __name__ == '__main__':
                 
                 label_map = {
                     'base': 'Baseline',
+                    'hiud20':  'hIUD 20% uptake',  
+                    'txa20': 'TXA 20% uptake',   
+                    'pill20': 'pill 20% uptake', 
                     'p20': 'Package 20% uptake',
                     'p40': 'Package 40% uptake',
                     'p60': 'Package 60% uptake'
@@ -536,12 +585,20 @@ if __name__ == '__main__':
             if i >= 3:
                 ax.set_xlabel('Year')
         
-        # Make an empty final axis and add legend there
-        axes[5].axis('off')
-        axes[5].legend(*axes[0].get_legend_handles_labels(), fontsize=16, frameon=False, loc='center')
+        sc.figlayout(fig=fig, tight=False)
+        pl.subplots_adjust(right=0.85, hspace=0.35)  # Make room on the right
         
-        sc.figlayout()
-        sc.savefig('figures_stochastic/hmb_scenario-package_stochastic_results.png', dpi=150)
+        # THEN add the legend
+        handles, labels_legend = axes[0].get_legend_handles_labels()
+        fig.legend(handles, labels_legend, 
+                   loc='center left', 
+                   bbox_to_anchor=(0.87, 0.25),
+                   fontsize=14, 
+                   frameon=False)
+       
+        sc.savefig(plotfolder_stochastic+'hmb_scenario-package_stochastic_results.png', dpi=150)
+        
+        
         
         
         # ---- PLOT: Scaled 0-100 version
@@ -559,6 +616,9 @@ if __name__ == '__main__':
                 
                 label_map = {
                     'base': 'Baseline',
+                    'hiud20':  'hIUD 20% uptake',  
+                    'txa20': 'TXA 20% uptake',   
+                    'pill20': 'pill 20% uptake', 
                     'p20': 'Package 20% uptake',
                     'p40': 'Package 40% uptake',
                     'p60': 'Package 60% uptake'
@@ -588,15 +648,23 @@ if __name__ == '__main__':
             if i >= 3:
                 ax.set_xlabel('Year')
         
-        # Make an empty final axis and add legend there
-        axes[5].axis('off')
-        axes[5].legend(*axes[0].get_legend_handles_labels(), fontsize=16, frameon=False, loc='center')
+        sc.figlayout(fig=fig, tight=False)
+        pl.subplots_adjust(right=0.85, hspace=0.35)  # Make room on the right
         
-        sc.figlayout()
-        sc.savefig('figures_stochastic/hmb_scenario-package_stochastic_results_y-axis-scaled-0-100.png', dpi=150)
+        # THEN add the legend
+        handles, labels_legend = axes[0].get_legend_handles_labels()
+        fig.legend(handles, labels_legend, 
+                   loc='center left', 
+                   bbox_to_anchor=(0.87, 0.25),
+                   fontsize=14, 
+                   frameon=False)
+        
+        sc.savefig(plotfolder_stochastic+'hmb_scenario-package_stochastic_results_y-axis-scaled-0-100.png', dpi=150)
+        
+        
         
         # Save aggregated statistics
-        sc.saveobj('results_stochastic/aggregated_stats.obj', stats)
+        sc.saveobj(outfolder_stochastic+'aggregated_stats.obj', stats)
 
 
 
