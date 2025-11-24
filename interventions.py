@@ -42,7 +42,8 @@ class hiud_hmb(ss.Intervention):
             self.eligibility = lambda sim: (
                     sim.people.menstruation.hmb_prone &
                     sim.people.menstruation.menstruating &
-                    ~sim.people.fp.pregnant)
+                    ~sim.people.fp.pregnant &
+                    ~sim.people.fp.postpartum)
         self.define_states(
             ss.BoolState('intervention_applied', label="Received hIUD through intervention"),
             ss.BoolState('hiud_offered', label="Was offered hIUD"),
@@ -103,7 +104,8 @@ class txa(ss.Intervention):
                     sim.people.menstruation.hmb_prone &
                     sim.people.menstruation.menstruating &
                     # ~sim.people.on_contra &
-                    ~sim.people.fp.pregnant)
+                    ~sim.people.fp.pregnant &
+                    ~sim.people.fp.postpartum)
         self.define_states(
             ss.BoolState('intervention_applied', label="Received TXA through intervention"),
             ss.BoolState('txa_offered', label="Was offered TXA"),
@@ -154,7 +156,8 @@ class pill_hmb(ss.Intervention):
                     sim.people.menstruation.hmb_prone &
                     sim.people.menstruation.menstruating &
                     # ~sim.people.on_contra &
-                    ~sim.people.fp.pregnant)
+                    ~sim.people.fp.pregnant &
+                    ~sim.people.fp.postpartum)
         self.define_states(
             ss.BoolState('intervention_applied', label="Received pill through intervention"),
             ss.BoolState('pill_offered', label="Was offered TXA"),
@@ -221,7 +224,10 @@ class hmb_package(ss.Intervention):
             self.eligibility = lambda sim: (
                     sim.people.menstruation.hmb_prone &
                     sim.people.menstruation.menstruating &
-                    ~sim.people.fp.pregnant)
+                    ~sim.people.fp.pregnant &
+                    #~sim.people.fp.postpartum & 
+                    (sim.connectors.fp.ti_delivery != sim.connectors.fp.ti)
+                    )
         self.define_states(
             ss.BoolState('package_offered', label="Was offered HMB package"),
             ss.BoolState('hiud_offered', label="Was offered hIUD"),
