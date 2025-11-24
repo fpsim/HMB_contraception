@@ -70,14 +70,19 @@ class Menstruation(ss.Connector):
                     pill = -0.5, # Effect of pill on poor menstrual hygiene - placeholder
                     txa = -0.5, # Effect of TXA on poor menstrual hygiene - placeholder
                 ),
+                #anemic=sc.objdict(  # Parameters for anemia
+                #    base = 0.01,  # Baseline probability of anemia
+                #    hmb = 1.5,  # Effect of HMB on anemia - placeholder : prob of anemia is 1/(1+np.exp(-(-np.log(1/0.01 -1)+1.5))) = 0.0433
+                #),
                 anemic=sc.objdict(  # Parameters for anemia
+                    # This is converted to an intercept in the logistic regression: -np.log(1/base-1)
                     base = 0.01,  # Baseline probability of anemia
-                    hmb = 1.5,  # Effect of HMB on anemia - placeholder
+                    hmb = -np.log(1/0.0433 - 1) + np.log(1/0.01 - 1),
                 ),
                 pain=sc.objdict(  # Parameters for menstrual pain
                     base = 0.1,  # Baseline probability of menstrual pain
-                    hmb = 1.5,  # Effect of HMB on menstrual pain - placeholder
-                    hiud = -0.5,  # Effect of hormonal IUD on menstrual pain - placeholder ##TODO: Other contraceptive methods
+                    hmb = 1.5,  # Effect of HMB on menstrual pain - placeholder: prob of pain is 1/(1+np.exp(-(-np.log(1/0.1 -1)+1.5))) = 0.332
+                    hiud = -0.5,  # Effect of hormonal IUD on menstrual pain - placeholder
                     pill = -0.5, # Effect of pill on menstrual pain - placeholder
                     txa = -0.5, # Effect of TXA on menstrual pain - placeholder
                 ),
