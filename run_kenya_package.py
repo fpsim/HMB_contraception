@@ -43,6 +43,8 @@ plt.Config.show_rmse = False
 
 
 
+
+
 def make_pars():
     pars = fp.make_fp_pars()  # For default pars
     pars.update_location('kenya')
@@ -115,14 +117,6 @@ def plot_by_age(sim, do_save=True, figs_directory=plotfolder):
     ax.set_title('CPR')
     if do_save: sc.savefig(f'{figs_directory}cpr_by_age.png')
 
-    # fig, ax = pl.subplots()
-    # df = pd.DataFrame(sim.analyzers.method_mix_by_age.results)
-    # df['method'] = sim.connectors.contraception.methods.keys()
-    # df_plot = df.melt(id_vars='method')
-    # sns.barplot(x=df_plot['method'], y=df_plot['value'], ax=ax, hue=df_plot['variable'], palette="viridis")
-    # pl.show()
-    # if do_save: sc.savefig(f'{figs_directory}/method_mix_by_age.png')
-
     return
 
 
@@ -130,6 +124,162 @@ def set_font(size=None, font='Arial'):
     sc.fonts(add='Helvetica', use='Helvetica')
     sc.options(font=font, fontsize=size)
     return
+
+def plot_stochastic_results(stats, years, si, colors, scenarios_to_plot=None, 
+                            res_to_plot=None, labels=None, label_map=None,
+                            fixed_scale=False, filename=None, 
+                            plotfolder=None):
+    """
+    Plot stochastic simulation results with uncertainty bands.
+    
+    Parameters
+    ----------
+    stats : dict
+        Dictionary containing statistics for each scenario and result type.
+        Structure: stats[scenario][result_type]['mean'/'lower'/'upper']
+    years : array
+        Array of years for x-axis (already sliced from si)
+    si : int
+        Start index for slicing results
+    colors : dict
+        Dictionary mapping scenario names to colors
+    scenarios_to_plot : list, optional
+        List of scenario names to include. If None, uses all scenarios in colors.
+    res_to_plot : list, optional
+        List of result types to plot. Default: ['hiud','pill', 'hmb', 'poor_mh', 'anemic', 'pain']
+    labels : list, optional
+        Labels for each result type. Default: ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain']
+    label_map : dict, optional
+        Dictionary mapping scenario names to display labels
+    fixed_scale : bool
+        If True, scale all y-axes to 0-100. If False, use variable scales.
+    filename : str, optional
+        Filename for saving. If None, auto-generates based on fixed_scale.
+    plotfolder : str
+        Directory to save the figure.
+    
+    Returns
+    -------
+    fig, axes : matplotlib figure and axes objects
+    """
+    
+    # Set defaults
+    if plotfolder is None:
+        plotfolder = 'figures_stochastic/'
+    if res_to_plot is None:
+        res_to_plot = ['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain']
+    if labels is None:
+        labels = ['hIUD Usage', 'pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain']
+    if scenarios_to_plot is None:
+        scenarios_to_plot = list(colors.keys())
+    if label_map is None:
+        label_map = {
+            'baseline': 'Baseline',
+            'hiud20': 'hIUD 20% coverage',
+            'hiud40': 'hIUD 40% coverage',
+            'txa20': 'TXA 20% coverage',
+            'pill20': 'pill 20% coverage',
+            'p20': 'Package 20% coverage',
+            'p40': 'Package 40% coverage',
+            'p60': 'Package 60% coverage'
+        }
+    
+    set_font(20)
+    
+    fig, axes = pl.subplots(2, 3, figsize=(15, 9))
+    axes = axes.ravel()
+    
+    lw = 2.5  # line width
+    
+    for i, res in enumerate(res_to_plot):
+        ax = axes[i]
+        
+        # Plot each scenario with uncertainty bands
+        for scenario in scenarios_to_plot:
+            if scenario not in stats:
+                continue
+            
+            mean = stats[scenario][res]['mean'][si:] * 100
+            lower = stats[scenario][res]['lower'][si:] * 100
+            upper = stats[scenario][res]['upper'][si:] * 100
+            
+            # Plot mean line
+            ax.plot(years, mean, label=label_map.get(scenario, scenario), 
+                   color=colors[scenario], linewidth=lw)
+            # Plot uncertainty band (95% CI)
+            ax.fill_between(years, lower, upper, color=colors[scenario], alpha=0.2)
+        
+        # Add vertical line for intervention start
+        ax.axvline(x=2026, color='k', ls='--', linewidth=1.5)
+        
+        # Add text label for start of intervention - positioning depends on scale type
+        if i == 0:  # Add text label only to first panel
+            if fixed_scale:
+                # Fixed position for 0-100 scale
+                label_height = 20
+            else:
+                # Dynamic position based on current y-axis limits
+                ax.autoscale()
+                label_height = ax.get_ylim()[1] * 0.9
+            
+            ax.text(2025.5, label_height, 'Start of\nintervention', 
+                   ha='right', va='top', fontsize=10, color='#4d4d4d')
+        
+        ax.set_title(labels[i])
+        
+        # Set y-axis limits
+        if fixed_scale:
+            ax.set_ylim(bottom=0, top=100)
+        else:
+            ax.set_ylim(bottom=0)
+        
+        # Remove top and right spines
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        
+        if i in [0, 3]:
+            ax.set_ylabel('Prevalence (%)')
+        
+        if i >= 3:
+            ax.set_xlabel('Year')
+    
+    sc.figlayout(fig=fig, tight=False)
+    pl.subplots_adjust(right=0.75, hspace=0.35)  # Make room on the right
+    
+    # Add the legend
+    handles, labels_legend = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels_legend, 
+               loc='center left', 
+               bbox_to_anchor=(0.75, 0.25),
+               fontsize=14, 
+               frameon=False)
+    
+    # Save figure
+    if filename is None:
+        scale_suffix = '_y-axis-scaled-0-100' if fixed_scale else ''
+        filename = f'hmb_stochastic_results{scale_suffix}.png'
+    
+    # Construct full path
+    full_path = os.path.join(plotfolder, filename)
+    print(f"Saving figure to: {full_path}")  # Debug print
+    
+    # Use pl.savefig directly instead of sc.savefig
+    fig.savefig(full_path, dpi=300, bbox_inches='tight')
+    print("Figure saved successfully!")  # Debug print
+    
+    return fig, axes
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -139,7 +289,7 @@ if __name__ == '__main__':
     to_run = [
          #'calib',
          #'plot_hmb',  # plot the HMB results
-         'run_scenario',  # run a scenario with interventions
+         #'run_scenario',  # run a scenario with interventions
          'run_stochastic', # run multiple iterations of scenarios
     ]
     do_run = True
@@ -190,6 +340,19 @@ if __name__ == '__main__':
 
 
     if 'run_scenario' in to_run:
+              
+        # Define colors
+        colors = {
+            'baseline': '#6c757d',  # dark gray
+            'hiud30':  '#372248',    # dark purple
+            'txa30': '#3c6e71',     # teal
+            'pill30': '#8fbc8f',    # sage green
+            'p20': '#ffa500',       # orange
+            'p40': '#ff8c00',       # darker orange
+            'p60': '#ff6500'        # darkest orange
+        }
+
+
         # run the scenarios
         if do_run:
             # --- set up simulations
@@ -267,17 +430,7 @@ if __name__ == '__main__':
         res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic', 'pain']
         labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain']
         
-        # Define colors
-        colors = {
-            'baseline': '#6c757d',  # dark gray
-            'hiud30':  '#372248',    # dark purple
-            'txa30': '#3c6e71',     # teal
-            'pill30': '#8fbc8f',    # sage green
-            'p20': '#ffa500',       # orange
-            'p40': '#ff8c00',       # darker orange
-            'p60': '#ff6500'        # darkest orange
-        }
-        
+
         lw = 2.5  # line width
         
         for i, res in enumerate(res_to_plot):
@@ -291,12 +444,12 @@ if __name__ == '__main__':
             yp40 = s_p40.results.menstruation[f'{res}_prev'][::12][si:]
             yp60 = s_p60.results.menstruation[f'{res}_prev'][::12][si:]
             
-            ax.plot(years, yhiud30*100, label='hIUD 30% uptake', color=colors['hiud30'], linewidth=lw)
-            ax.plot(years, ytxa30*100, label='TXA 30% uptake', color=colors['txa30'], linewidth=lw)
-            ax.plot(years, ypill30*100, label='pill 30% uptake', color=colors['pill30'], linewidth=lw)
-            ax.plot(years, yp20*100, label='package 20% uptake', color=colors['p20'], linewidth=lw)
-            ax.plot(years, yp40*100, label='package 40% uptake', color=colors['p40'], linewidth=lw)
-            ax.plot(years, yp60*100, label='package 60% uptake', color=colors['p60'], linewidth=lw)
+            ax.plot(years, yhiud30*100, label='hIUD 30% coverage', color=colors['hiud30'], linewidth=lw)
+            ax.plot(years, ytxa30*100, label='TXA 30% coverage', color=colors['txa30'], linewidth=lw)
+            ax.plot(years, ypill30*100, label='pill 30% coverage', color=colors['pill30'], linewidth=lw)
+            ax.plot(years, yp20*100, label='package 20% coverage', color=colors['p20'], linewidth=lw)
+            ax.plot(years, yp40*100, label='package 40% coverage', color=colors['p40'], linewidth=lw)
+            ax.plot(years, yp60*100, label='package 60% coverage', color=colors['p60'], linewidth=lw)
             ax.plot(years, y0*100, label='Baseline', color=colors['baseline'], linewidth=lw)
 
             # Add vertical line with label
@@ -318,13 +471,13 @@ if __name__ == '__main__':
                 ax.set_ylabel('Prevalence (%)')
         
         sc.figlayout(fig=fig, tight=False)
-        pl.subplots_adjust(right=0.85, hspace=0.35)  # Make room on the right
+        pl.subplots_adjust(right=0.75, hspace=0.35)  # Make room on the right
         
         # THEN add the legend
         handles, labels_legend = axes[0].get_legend_handles_labels()
         fig.legend(handles, labels_legend, 
                    loc='center left', 
-                   bbox_to_anchor=(0.87, 0.25),
+                   bbox_to_anchor=(0.75, 0.25),
                    fontsize=14, 
                    frameon=False)
 
@@ -337,8 +490,8 @@ if __name__ == '__main__':
         fig, axes = pl.subplots(2, 3, figsize=(15, 9))
         axes = axes.ravel()
         
-        res_to_plot = ['hiud', 'hmb', 'poor_mh', 'anemic', 'pain']
-        labels = ['hIUD Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain']
+        res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic', 'pain']
+        labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain']
         
         # Define colors
         colors = {
@@ -364,12 +517,12 @@ if __name__ == '__main__':
             yp40 = s_p40.results.menstruation[f'{res}_prev'][::12][si:]
             yp60 = s_p60.results.menstruation[f'{res}_prev'][::12][si:]
             
-            ax.plot(years, yhiud30*100, label='hIUD 30% uptake', color=colors['hiud30'], linewidth=lw)
-            ax.plot(years, ytxa30*100, label='TXA 30% uptake', color=colors['txa30'], linewidth=lw)
-            ax.plot(years, ypill30*100, label='pill 30% uptake', color=colors['pill30'], linewidth=lw)
-            ax.plot(years, yp20*100, label='package 20% uptake', color=colors['p20'], linewidth=lw)
-            ax.plot(years, yp40*100, label='package 40% uptake', color=colors['p40'], linewidth=lw)
-            ax.plot(years, yp60*100, label='package 60% uptake', color=colors['p60'], linewidth=lw)
+            ax.plot(years, yhiud30*100, label='hIUD 30% coverage', color=colors['hiud30'], linewidth=lw)
+            ax.plot(years, ytxa30*100, label='TXA 30% coverage', color=colors['txa30'], linewidth=lw)
+            ax.plot(years, ypill30*100, label='pill 30% coverage', color=colors['pill30'], linewidth=lw)
+            ax.plot(years, yp20*100, label='package 20% coverage', color=colors['p20'], linewidth=lw)
+            ax.plot(years, yp40*100, label='package 40% coverage', color=colors['p40'], linewidth=lw)
+            ax.plot(years, yp60*100, label='package 60% coverage', color=colors['p60'], linewidth=lw)
             ax.plot(years, y0*100, label='Baseline', color=colors['baseline'], linewidth=lw)
 
             # Add vertical line with label
@@ -391,13 +544,13 @@ if __name__ == '__main__':
                 ax.set_ylabel('Prevalence (%)')
         
         sc.figlayout(fig=fig, tight=False)
-        pl.subplots_adjust(right=0.85, hspace=0.35)  # Make room on the right
+        pl.subplots_adjust(right=0.75, hspace=0.35)  # Make room on the right
         
         # THEN add the legend
         handles, labels_legend = axes[0].get_legend_handles_labels()
         fig.legend(handles, labels_legend, 
                    loc='center left', 
-                   bbox_to_anchor=(0.87, 0.25),
+                   bbox_to_anchor=(0.75, 0.25),
                    fontsize=14, 
                    frameon=False)
         
@@ -411,6 +564,17 @@ if __name__ == '__main__':
         # run the scenarios for multiple random seeds
         n_seeds = 50 
         
+        colors = {
+            'hiud20':  '#372248',    # dark purple
+            'hiud40':  '#3C427C',    # blue-ish purple
+            'txa20': '#3c6e71',      # teal
+            'pill20': '#8fbc8f',     # sage green
+            'p20': '#ffa500',        # orange
+            'p40': '#ff8c00',        # darker orange
+            'p60': '#ff6500',        # darkest orange
+            'baseline': '#6c757d',   # dark gray
+        }
+                
         if do_run:
             for seed in np.arange(n_seeds):
                 # --- set up simulations
@@ -418,10 +582,15 @@ if __name__ == '__main__':
                 s_base = make_sim(stop=2032)
                 s_base['pars']['rand_seed'] = seed
                 
-                # only hIUD
+                # only hIUD - 20% coverage
                 s_hiud20 = make_sim(stop=2032)
                 s_hiud20['pars']['interventions'] = [hiud_hmb(prob_offer=0.2, prob_accept=0.5)]
                 s_hiud20['pars']['rand_seed'] = seed
+                
+                # only hIUD - 40% coverage
+                s_hiud40 = make_sim(stop=2032)
+                s_hiud40['pars']['interventions'] = [hiud_hmb(prob_offer=0.4, prob_accept=0.5)]
+                s_hiud40['pars']['rand_seed'] = seed
                 
                 # only txa
                 s_txa20 = make_sim(stop=2032)
@@ -448,6 +617,7 @@ if __name__ == '__main__':
                                                  prob_accept_txa=0.5, 
                                                  prob_accept_pill=0.5)]
                 s_p40['pars']['rand_seed'] = seed
+                
                 # full package - 60 % of eligible pop
                 s_p60 = make_sim(stop=2032)
                 s_p60['pars']['interventions'] = [hmb_package(prob_offer=0.6, 
@@ -457,29 +627,30 @@ if __name__ == '__main__':
                 s_p60['pars']['rand_seed'] = seed
                 
                 # --- run the simulations
-                m = ss.parallel([s_base, s_hiud20, s_txa20, s_pill20,
+                m = ss.parallel([s_base, s_hiud20, s_hiud40, s_txa20, s_pill20,
                                  s_p20, s_p40, s_p60], 
                                 parallel=False)
                 # replace sims with run versions
-                s_base, s_hiud20, s_txa20, s_pill20, s_p20, s_p40, s_p60 = m.sims[:]  
+                s_base, s_hiud20, s_hiud40, s_txa20, s_pill20, s_p20, s_p40, s_p60 = m.sims[:]  
                 
                 # --- save results
                 sc.saveobj(outfolder_stochastic+f'kenya_package_base_seed{seed}.sim', s_base)
                 sc.saveobj(outfolder_stochastic+f'kenya_package_hiud-20_seed{seed}.sim', s_hiud20)
+                sc.saveobj(outfolder_stochastic+f'kenya_package_hiud-40_seed{seed}.sim', s_hiud40)
                 sc.saveobj(outfolder_stochastic+f'kenya_package_txa-20_seed{seed}.sim', s_txa20)
                 sc.saveobj(outfolder_stochastic+f'kenya_package_pill-20_seed{seed}.sim', s_pill20)
                 sc.saveobj(outfolder_stochastic+f'kenya_package_package20_seed{seed}.sim', s_p20)
                 sc.saveobj(outfolder_stochastic+f'kenya_package_package40_seed{seed}.sim', s_p40)
                 sc.saveobj(outfolder_stochastic+f'kenya_package_package60_seed{seed}.sim', s_p60)
     
-           
     
         
         # --- aggregate results
         
         # Initialize dictionaries to store results for each scenario
-        scenarios = ['base', 'hiud20', 'txa20', 'pill20', 'p20', 'p40', 'p60']
-        res_to_plot = ['hiud', 'hmb', 'poor_mh', 'anemic', 'pain']
+        scenarios = ['baseline', 'hiud20', 'hiud40', 'txa20', 'pill20', 'p20', 'p40', 'p60']
+        res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic', 'pain']
+        labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain']    
         
         # Dictionary to store all runs
         all_results = {scenario: {res: [] for res in res_to_plot} for scenario in scenarios}
@@ -488,13 +659,15 @@ if __name__ == '__main__':
         for seed in range(n_seeds):
             s_base = sc.loadobj(outfolder_stochastic+f'kenya_package_base_seed{seed}.sim')
             s_hiud20 = sc.loadobj(outfolder_stochastic+f'kenya_package_hiud-20_seed{seed}.sim')
+            s_hiud40 = sc.loadobj(outfolder_stochastic+f'kenya_package_hiud-40_seed{seed}.sim')
             s_txa20 = sc.loadobj(outfolder_stochastic+f'kenya_package_txa-20_seed{seed}.sim')
             s_pill20 = sc.loadobj(outfolder_stochastic+f'kenya_package_pill-20_seed{seed}.sim')
             s_p20 = sc.loadobj(outfolder_stochastic+f'kenya_package_package20_seed{seed}.sim')
             s_p40 = sc.loadobj(outfolder_stochastic+f'kenya_package_package40_seed{seed}.sim')
             s_p60 = sc.loadobj(outfolder_stochastic+f'kenya_package_package60_seed{seed}.sim')
             
-            sims = {'base': s_base, 'hiud20': s_hiud20, 'txa20': s_txa20, 'pill20': s_pill20, 
+            sims = {'baseline': s_base, 'hiud20': s_hiud20, 'hiud40': s_hiud40, 
+                    'txa20': s_txa20, 'pill20': s_pill20, 
                     'p20': s_p20, 'p40': s_p40, 'p60': s_p60}
             
             for scenario, sim in sims.items():
@@ -523,153 +696,49 @@ if __name__ == '__main__':
         
         set_font(20)
         
-        # ---- PLOT: Stochastic results with uncertainty bands
-        fig, axes = pl.subplots(2, 3, figsize=(15, 9))
-        axes = axes.ravel()
+        # ---- PLOT: All scenarios, variable scale
+        plot_stochastic_results(
+            stats=stats, years=years, si=si, colors=colors,
+            fixed_scale=False,
+            plotfolder=plotfolder_stochastic,
+            filename='hmb_scenario-package_stochastic_results.png'
+        )
         
-        labels = ['hIUD Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain']
+        # ---- PLOT: All scenarios, fixed 0-100 scale
+        plot_stochastic_results(
+            stats=stats, years=years, si=si, colors=colors,
+            fixed_scale=True,
+            plotfolder=plotfolder_stochastic,
+            filename='hmb_scenario-package_stochastic_results_y-axis-scaled-0-100.png'
+        )
         
-        # Define colors
-        colors = {
-            'p20': '#ffa500',    # orange
-            'hiud20':  '#372248',    # dark purple
-            'txa20': '#3c6e71',     # teal
-            'pill20': '#8fbc8f',    # sage green
-            'p40': '#ff8c00',    # darker orange
-            'p60': '#ff6500',    # darkest orange
-            'base': '#6c757d',   # dark gray
-        }
+        # ---- PLOT: Subset of scenarios, variable scale
+        # define the subset of scenarios
+        scenarios_subset = ['baseline', 'hiud20', 'hiud40', 'p40']
+        # make the plots
+        plot_stochastic_results(
+            stats=stats, years=years, si=si, colors=colors,
+            scenarios_to_plot=scenarios_subset,
+            fixed_scale=False,
+            plotfolder=plotfolder_stochastic,
+            filename='hmb_package_stochastic_results_subset-scenarios.png'
+        )
         
-        lw = 2.5  # line width
-        
-        for i, res in enumerate(res_to_plot):
-            ax = axes[i]
-            
-            # Plot each scenario with uncertainty bands
-            for scenario, color in colors.items():
-                mean = stats[scenario][res]['mean'][si:] * 100
-                lower = stats[scenario][res]['lower'][si:] * 100
-                upper = stats[scenario][res]['upper'][si:] * 100
-                
-                label_map = {
-                    'base': 'Baseline',
-                    'hiud20':  'hIUD 20% uptake',  
-                    'txa20': 'TXA 20% uptake',   
-                    'pill20': 'pill 20% uptake', 
-                    'p20': 'Package 20% uptake',
-                    'p40': 'Package 40% uptake',
-                    'p60': 'Package 60% uptake'
-                }
-                
-                # Plot mean line
-                ax.plot(years, mean, label=label_map[scenario], color=color, linewidth=lw)
-                # Plot uncertainty band (95% CI)
-                ax.fill_between(years, lower, upper, color=color, alpha=0.2)
-            
-            # Add vertical line with label
-            ax.axvline(x=2026, color='k', ls='--', linewidth=1.5)
-            if i == 0:  # Add text label only to first panel
-                ax.text(2025.5, ax.get_ylim()[1] * 0.9, 'Start of\nintervention', 
-                       ha='right', va='top', fontsize=10, color='#4d4d4d')
-            
-            ax.set_title(labels[i])
-            ax.set_ylim(bottom=0)
-            
-            # Remove top and right spines
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            
-            if i in [0, 3]:
-                ax.set_ylabel('Prevalence (%)')
-            
-            if i >= 3:
-                ax.set_xlabel('Year')
-        
-        sc.figlayout(fig=fig, tight=False)
-        pl.subplots_adjust(right=0.85, hspace=0.35)  # Make room on the right
-        
-        # THEN add the legend
-        handles, labels_legend = axes[0].get_legend_handles_labels()
-        fig.legend(handles, labels_legend, 
-                   loc='center left', 
-                   bbox_to_anchor=(0.87, 0.25),
-                   fontsize=14, 
-                   frameon=False)
-       
-        sc.savefig(plotfolder_stochastic+'hmb_scenario-package_stochastic_results.png', dpi=150)
+        # ---- PLOT: Subset of scenarios, fixed 0-100 scale
+        plot_stochastic_results(
+            stats=stats, years=years, si=si, colors=colors,
+            scenarios_to_plot=scenarios_subset,
+            fixed_scale=True,
+            plotfolder=plotfolder_stochastic,
+            filename='hmb_package_stochastic_results_subset-scenarios_y-axis-scaled-0-100.png'
+        )
         
         
         
         
-        # ---- PLOT: Scaled 0-100 version
-        fig, axes = pl.subplots(2, 3, figsize=(15, 9))
-        axes = axes.ravel()
-        
-        for i, res in enumerate(res_to_plot):
-            ax = axes[i]
-            
-            # Plot each scenario with uncertainty bands
-            for scenario, color in colors.items():
-                mean = stats[scenario][res]['mean'][si:] * 100
-                lower = stats[scenario][res]['lower'][si:] * 100
-                upper = stats[scenario][res]['upper'][si:] * 100
-                
-                label_map = {
-                    'base': 'Baseline',
-                    'hiud20':  'hIUD 20% uptake',  
-                    'txa20': 'TXA 20% uptake',   
-                    'pill20': 'pill 20% uptake', 
-                    'p20': 'Package 20% uptake',
-                    'p40': 'Package 40% uptake',
-                    'p60': 'Package 60% uptake'
-                }
-                
-                # Plot mean line
-                ax.plot(years, mean, label=label_map[scenario], color=color, linewidth=lw)
-                # Plot uncertainty band (95% CI)
-                ax.fill_between(years, lower, upper, color=color, alpha=0.2)
-            
-            # Add vertical line with label
-            ax.axvline(x=2026, color='k', ls='--', linewidth=1.5)
-            if i == 0:  # Add text label only to first panel
-                ax.text(2025.5, 20, 'Start of\nintervention', 
-                       ha='right', va='top', fontsize=10, color='#4d4d4d')
-            
-            ax.set_title(labels[i])
-            ax.set_ylim(bottom=0, top=100)
-            
-            # Remove top and right spines
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            
-            if i in [0, 3]:
-                ax.set_ylabel('Prevalence (%)')
-            
-            if i >= 3:
-                ax.set_xlabel('Year')
-        
-        sc.figlayout(fig=fig, tight=False)
-        pl.subplots_adjust(right=0.85, hspace=0.35)  # Make room on the right
-        
-        # THEN add the legend
-        handles, labels_legend = axes[0].get_legend_handles_labels()
-        fig.legend(handles, labels_legend, 
-                   loc='center left', 
-                   bbox_to_anchor=(0.87, 0.25),
-                   fontsize=14, 
-                   frameon=False)
-        
-        sc.savefig(plotfolder_stochastic+'hmb_scenario-package_stochastic_results_y-axis-scaled-0-100.png', dpi=150)
         
         
         
-        # Save aggregated statistics
-        sc.saveobj(outfolder_stochastic+'aggregated_stats.obj', stats)
-
-
-
-
-
-
-
-
+        
+        
+        
