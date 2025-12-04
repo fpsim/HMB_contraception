@@ -419,7 +419,7 @@ if __name__ == '__main__':
                 # --- run the simulations
                 m = ss.parallel([s_base, s_hiud20, s_hiud40, s_txa20, s_pill20,
                                  s_p20, s_p40, s_p60], 
-                                parallel=False)
+                                parallel=True)
                 # replace sims with run versions
                 s_base, s_hiud20, s_hiud40, s_txa20, s_pill20, s_p20, s_p40, s_p60 = m.sims[:]  
                 
@@ -578,6 +578,7 @@ if __name__ == '__main__':
         
         
         # run the scenarios
+
         for prob_offer in [0.25, 0.5, 0.75]:
             for prob_accept in [0.25, 0.5, 0.75]:
                 
@@ -612,15 +613,14 @@ if __name__ == '__main__':
                         'upper': np.percentile(arr, 97.5, axis=0)
                     }
             
-            # Save results
-            sc.saveobj(outfolder+'uptake-sweep_results-stats.obj', all_results)
+        # Save results
+        sc.saveobj(outfolder+'uptake-sweep_results-stats.obj', all_results)
+
+        # Plot results
+        # todo
             
-            # Plot results
-            # todo
             
-            
-            
-        
+# todo: change to multisim for efficiency            
         
         
         
