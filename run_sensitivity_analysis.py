@@ -321,7 +321,7 @@ def run_anemia_sensitivity():
     # Get education module (load once to reuse)
     objective_data = pd.read_csv("data/kenya_objective.csv")
     attainment_data = pd.read_csv("data/kenya_initialization.csv")
-    edu_base = Education(objective_data=objective_data, attainment_data=attainment_data)
+    #edu_base = Education(objective_data=objective_data, attainment_data=attainment_data)
     
     # Run each anemia scenario (with and without intervention)
     for scenario in anemia_scenarios:
