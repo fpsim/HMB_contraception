@@ -62,8 +62,8 @@ def make_sim(pars=None, stop=2021):
 
     # Create modules
     mens = Menstruation()
-    objective_data = pd.read_csv(f"data/kenya_objective.csv")
-    attainment_data = pd.read_csv(f"data/kenya_initialization.csv")
+    objective_data = pd.read_csv("data/kenya_objective.csv")
+    attainment_data = pd.read_csv("data/kenya_initialization.csv")
     edu = Education(objective_data=objective_data, attainment_data=attainment_data)
 
     # Run the sim

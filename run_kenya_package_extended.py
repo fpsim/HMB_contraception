@@ -19,6 +19,10 @@ import pandas as pd
 import pylab as pl
 import sciris as sc
 import os
+import itertools
+import gc
+# viz
+import seaborn as sns
 # starsim
 import starsim as ss
 # fpsim
@@ -100,7 +104,7 @@ def make_sim(pars=None, stop=2021):
     sim = fp.Sim(
         start=2000,
         stop=stop,
-        n_agents=100000,
+        n_agents=10000,
         location='kenya',
         pars=pars,
         analyzers=[fp.cpr_by_age(), fp.method_mix_by_age()],
@@ -287,7 +291,117 @@ def plot_stochastic_results(stats, years, si, colors, scenarios_to_plot=None,
     return fig, axes
 
 
+def plot_parameter_sweep_heatmaps_seaborn(all_results, baseline_key='baseline',
+                                           prob_offer_values=[0.25, 0.5, 0.75],
+                                           prob_accept_values=[0.25, 0.5, 0.75],
+                                           intervention_start_year=2026,
+                                           res_to_plot=None, labels=None,
+                                           plotfolder=None, filename=None):
+    
 
+    
+    if res_to_plot is None:
+        res_to_plot = ['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain']
+    if labels is None:
+        labels = ['hIUD Usage', 'Pill Usage', 'HMB', 'Poor MH', 'Anemia', 'Pain']
+    if plotfolder is None:
+        plotfolder = 'figures/'
+    if filename is None:
+        filename = 'parameter_sweep_heatmaps_seaborn.png'
+    
+    years = np.arange(2000, 2033)
+    intervention_idx = np.where(years >= intervention_start_year)[0][0]
+    
+    # Calculate changes
+    change_matrices = {}
+    baseline_post_avg = {}
+    
+    for res in res_to_plot:
+        baseline_mean = all_results[baseline_key][res]['mean']
+        baseline_post_avg[res] = np.mean(baseline_mean[intervention_idx:])
+    
+    for res in res_to_plot:
+        matrix = np.zeros((len(prob_accept_values), len(prob_offer_values)))
+        
+        for i, prob_offer in enumerate(prob_offer_values):
+            for j, prob_accept in enumerate(prob_accept_values):
+                scenario_name = f'scenario_offer-{prob_offer*100}_accept-{prob_accept*100}'
+                
+                if scenario_name in all_results:
+                    scenario_mean = all_results[scenario_name][res]['mean']
+                    scenario_post_avg = np.mean(scenario_mean[intervention_idx:])
+                    
+                    if baseline_post_avg[res] != 0:
+                        pct_change = ((scenario_post_avg - baseline_post_avg[res]) / 
+                                      baseline_post_avg[res]) * 100
+                    else:
+                        pct_change = 0
+                    
+                    matrix[j, i] = pct_change  # Note: j,i for correct orientation
+        
+        change_matrices[res] = matrix
+    
+    # Create plot
+    fig, axes = pl.subplots(2, 3, figsize=(14, 10))
+    axes = axes.ravel()
+    
+    # Custom diverging palette
+    cmap = sns.diverging_palette(220, 20, as_cmap=True)  # Blue to Orange
+    
+    # Find global limits
+    all_values = np.concatenate([m.flatten() for m in change_matrices.values()])
+    vmax = all_values.max()
+    vmin = all_values.min()
+    
+    for idx, (res, label) in enumerate(zip(res_to_plot, labels)):
+        ax = axes[idx]
+        
+        # Create DataFrame for seaborn
+        df = pd.DataFrame(
+            change_matrices[res],
+            index=[f'{int(p*100)}%' for p in prob_accept_values],
+            columns=[f'{int(p*100)}%' for p in prob_offer_values]
+        )
+        
+        # Plot heatmap
+        sns.heatmap(df, 
+                    ax=ax,
+                    cmap=cmap,
+                    center=0,
+                    vmin=vmin,
+                    vmax=vmax,
+                    annot=True,
+                    fmt='.1f',
+                    annot_kws={'size': 11, 'weight': 'bold'},
+                    cbar=idx == 2,  # Only show colorbar for one panel
+                    cbar_kws={'label': '% Change'} if idx == 2 else {},
+                    linewidths=0.5,
+                    linecolor='white')
+        
+        ax.set_title(label, fontsize=14, fontweight='bold')
+        
+        if idx >= 3:
+            ax.set_xlabel('Probability of Offer', fontsize=12)
+        else:
+            ax.set_xlabel('')
+            
+        if idx in [0, 3]:
+            ax.set_ylabel('Probability of Accept', fontsize=12)
+        else:
+            ax.set_ylabel('')
+    
+    fig.suptitle('Impact of Intervention by Coverage and Acceptability\n(% change from baseline)', 
+                 fontsize=16, fontweight='bold', y=1.02)
+    
+    pl.tight_layout()
+    
+    full_path = os.path.join(plotfolder, filename)
+    fig.savefig(full_path, dpi=300, bbox_inches='tight')
+    print(f"Figure saved to: {full_path}")
+    
+    pl.show()
+    
+    return fig, axes, change_matrices
 
 
 
@@ -298,7 +412,7 @@ if __name__ == '__main__':
     to_run = [
          #'calib', # calibration
          #'plot_hmb',  # plot the calibration results
-         'run_stochastic', # main analysis
+         #'run_stochastic', # main analysis
          'run_coverage_sweep', # sensitivity analysis 
     ]
     do_run = True
@@ -524,107 +638,120 @@ if __name__ == '__main__':
         )
         
         
-    if 'run_coverage_sweep' in to_run:
-        
-        # consider different combinations of coverage (prob_offer) 
-        # and acceptability (uniform acceptability prob for all three 
-        # interventions in the package)
-        
-        n_seeds = 100
-        max_attempts = 500 
-
-        # prep output
-        all_results = {}
-
-        # Run baseline (no intervention)
-        baseline_results = {'hiud': [], 'pill': [], 'hmb': [], 'poor_mh': [], 'anemic': [], 'pain': []}
-                
-        successful_seeds = 0
-        seed = 0
-        # error handling
-        while successful_seeds < n_seeds and seed < max_attempts:
-            try:
-                s_base = make_sim(stop=2032)
-                s_base['pars']['rand_seed'] = seed
-                s_base.run()
-                
-                # If successful, collect results
-                for res in baseline_results.keys():
-                    baseline_results[res].append(s_base.results.menstruation[f'{res}_prev'][::12])
-                
-                successful_seeds += 1
-                print(f"  Baseline seed {seed}: success ({successful_seeds}/{n_seeds} completed)")
-                
-            except ValueError as e:
-                if "Postpartum women should not currently be using contraception" in str(e):
-                    print(f"  Baseline seed {seed}: skipped due to postpartum contraception error")
-                else:
-                    raise e  # re-raise if it's a different error
-            
-            seed += 1
-        
-        if successful_seeds < n_seeds:
-            print(f"  Warning: Only completed {successful_seeds}/{n_seeds} seeds for baseline after {max_attempts} attempts")
-        # calculate statistics for baseline
-        all_results['baseline'] = {}
-        for res in baseline_results.keys():
-            arr = np.array(baseline_results[res])
-            all_results['baseline'][res] = {
-                'mean': np.mean(arr, axis=0),
-                'lower': np.percentile(arr, 2.5, axis=0),
-                'upper': np.percentile(arr, 97.5, axis=0)
-            }
-
         
         
-        # run the scenarios
-
-        for prob_offer in [0.25, 0.5, 0.75]:
-            for prob_accept in [0.25, 0.5, 0.75]:
-                
-                scenario_name = 'scenario_offer-'+str(prob_offer*100)+'_accept-'+str(prob_accept*100)
     
-                print(f"Running scenario: coverage {prob_offer}, acceptability {prob_accept}...")
-                scenario_results = {'hiud': [], 'pill': [], 'hmb': [], 'poor_mh': [], 'anemic': [], 'pain': []}
+    if 'run_coverage_sweep' in to_run:
                 
-                for seed in range(n_seeds):
-                    s_int = make_sim(stop=2032)
-                    s_int['pars']['rand_seed'] = seed
-                    s_int['pars']['interventions'] = [
-                        hmb_package(
-                            prob_offer = prob_offer,
-                            prob_accept_hiud = prob_accept,
-                            prob_accept_txa = prob_accept,
-                            prob_accept_pill = prob_accept
-                        )
-                    ]
-                    s_int.run()
-                    
-                    for res in scenario_results.keys():
-                        scenario_results[res].append(s_int.results.menstruation[f'{res}_prev'][::12])
-                
-                # Calculate statistics
-                all_results[scenario_name] = {}
-                for res in scenario_results.keys():
-                    arr = np.array(scenario_results[res])
-                    all_results[scenario_name][res] = {
-                        'mean': np.mean(arr, axis=0),
-                        'lower': np.percentile(arr, 2.5, axis=0),
-                        'upper': np.percentile(arr, 97.5, axis=0)
-                    }
+        n_seeds = 20
+        prob_offer_values = [0.25, 0.5, 0.75]
+        prob_accept_values = [0.25, 0.5, 0.75]
+        res_keys = ['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain']
+        
+        def compute_and_save_scenario(scenario_name, sim_list):
+            """Run sims, compute stats, save, and free memory."""
+            msim = ss.MultiSim(sim_list)
+            msim.run(n_cpus=4)
             
-        # Save results
-        sc.saveobj(outfolder+'uptake-sweep_results-stats.obj', all_results)
-
-        # Plot results
-        # todo
+            scenario_results = {res: [] for res in res_keys}
+            for sim in msim.sims:
+                for res in res_keys:
+                    scenario_results[res].append(sim.results.menstruation[f'{res}_prev'][::12])
+            
+            stats = {}
+            for res in res_keys:
+                arr = np.array(scenario_results[res])
+                stats[res] = {
+                    'mean': np.mean(arr, axis=0),
+                    'lower': np.percentile(arr, 2.5, axis=0),
+                    'upper': np.percentile(arr, 97.5, axis=0)
+                }
+            
+            # Save intermediate result
+            sc.saveobj(outfolder + f'uptake-sweep_{scenario_name}.obj', stats)
+            
+            # Free memory
+            del msim, sim_list, scenario_results
+            gc.collect()
+            
+            return stats
+        
+        all_results = {}
+        
+        # Baseline
+        print("Running baseline...")
+        baseline_sims = [make_sim(stop=2032) for _ in range(n_seeds)]
+        for i, sim in enumerate(baseline_sims):
+            sim['pars']['rand_seed'] = i
+        all_results['baseline'] = compute_and_save_scenario('baseline', baseline_sims)
+        
+        # Intervention scenarios
+        param_combinations = list(itertools.product(prob_offer_values, prob_accept_values))
+        
+        for prob_offer, prob_accept in param_combinations:
+            scenario_name = f'scenario_offer-{prob_offer*100}_accept-{prob_accept*100}'
+            print(f"Running {scenario_name}...")
+            
+            scenario_sims = []
+            for seed in range(n_seeds):
+                s_int = make_sim(stop=2032)
+                s_int['pars']['rand_seed'] = seed
+                s_int['pars']['interventions'] = [
+                    hmb_package(
+                        prob_offer=prob_offer,
+                        prob_accept_hiud=prob_accept,
+                        prob_accept_txa=prob_accept,
+                        prob_accept_pill=prob_accept
+                    )
+                ]
+                scenario_sims.append(s_int)
+            
+            all_results[scenario_name] = compute_and_save_scenario(scenario_name, scenario_sims)
+        
+        # Save combined results
+        sc.saveobj(outfolder + 'uptake-sweep_results-stats.obj', all_results)
+        print("Complete!")
+        
+        
+        # load
+        all_results = sc.loadobj(outfolder + 'uptake-sweep_results-stats.obj')
+        
+        # Make heatmap
+        fig, axes, change_matrices = plot_parameter_sweep_heatmaps_seaborn(
+            all_results=all_results,
+            baseline_key='baseline',
+            prob_offer_values=prob_offer_values,
+            prob_accept_values=prob_accept_values,
+            intervention_start_year=2026,
+            res_to_plot=[#'hiud', 'pill', 
+                         'hmb', 'poor_mh', 'anemic', 'pain'],
+            labels=[#'hIUD Usage', 'Pill Usage', 
+                    'HMB', 'Poor MH', 'Anemia', 'Pain'],
+            plotfolder=plotfolder,
+            filename='parameter_sweep_heatmaps.png'
+        )
+        
             
             
-# todo: change to multisim for efficiency            
+            
+            
+            
         
         
         
         
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+      
         
         
         
