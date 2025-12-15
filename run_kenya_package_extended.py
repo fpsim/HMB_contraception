@@ -5,12 +5,6 @@ Created on Mon Dec  1 16:15:35 2025
 @author: kirstinol
 """
 
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Nov 11 10:26:40 2025
-
-@author: kirstinol
-"""
 
 
 
@@ -24,6 +18,7 @@ import gc
 # viz
 import seaborn as sns
 # starsim
+
 import starsim as ss
 # fpsim
 import fpsim as fp
@@ -412,7 +407,7 @@ if __name__ == '__main__':
     to_run = [
          #'calib', # calibration
          #'plot_hmb',  # plot the calibration results
-         #'run_stochastic', # main analysis
+         'run_stochastic', # main analysis
          'run_coverage_sweep', # sensitivity analysis 
     ]
     do_run = True
@@ -466,7 +461,7 @@ if __name__ == '__main__':
 
     if 'run_stochastic' in to_run:
         # run the scenarios for multiple random seeds
-        n_seeds = 100
+        n_seeds = 50
         
         colors = {
             'hiud20':  '#372248',    # dark purple
@@ -636,7 +631,6 @@ if __name__ == '__main__':
             plotfolder=plotfolder_stochastic,
             filename='hmb_package_stochastic_results_subset-scenarios_y-axis-scaled-0-100.png'
         )
-        
         
         
         
