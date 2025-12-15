@@ -250,54 +250,44 @@ class hmb_package(ss.Intervention):
     def step(self):
         sim = self.sim
         if sim.t.now() == self.pars.year:
-            print('Offering HMB intervention package!')
             
             # Step 1: Get eligible people
             elig_uids = self.check_eligibility()
-            print(f"Eligible for package: {len(elig_uids)}")
             
             # Step 2: Select 20% to offer the package
             package_offered_uids = self.pars.prob_offer.filter(elig_uids)
             self.package_offered[package_offered_uids] = True
-            print(f"Offered package: {len(package_offered_uids)}")
             
-            # Step 3: Offer contraception to all in the package
-            self.hiud_offered[package_offered_uids] = True
-            hiud_accept_uids = self.pars.prob_accept_hiud.filter(package_offered_uids)
+            # Step 3: Offer the three interventions in the package
+            # 3.1 TXA
+            self.txa_offered[package_offered_uids] = True
+            txa_accept_uids = self.pars.prob_accept_txa.filter(package_offered_uids)
+            self.txa_accepted[txa_accept_uids] = True
+            
+            # 3.2 pill
+            txa_declined_uids = np.setdiff1d(package_offered_uids, txa_accept_uids)
+            self.pill_offered[txa_declined_uids] = True
+            pill_accept_uids = self.pars.prob_accept_pill.filter(txa_declined_uids)
+            self.pill_accepted[pill_accept_uids] = True
+            # apply contraception
+            sim.people.fp.method[pill_accept_uids] = self.pill_idx
+            sim.people.fp.on_contra[pill_accept_uids] = True
+            sim.people.fp.ever_used_contra[pill_accept_uids] = True
+            method_dur = sim.connectors.contraception.set_dur_method(pill_accept_uids)
+            sim.people.fp.ti_contra[pill_accept_uids] = self.ti + method_dur
+            
+            # 3.3 hIUD
+            pill_declined_uids = np.setdiff1d(txa_declined_uids, pill_accept_uids)
+            self.hiud_offered[pill_declined_uids] = True
+            hiud_accept_uids = self.pars.prob_accept_hiud.filter(pill_declined_uids)
             self.hiud_accepted[hiud_accept_uids] = True
-            print(f"Accepted hIUD: {len(hiud_accept_uids)}")
-            
-            # Apply contraception
+            # apply contraception
             sim.people.fp.method[hiud_accept_uids] = self.iud_idx
             sim.people.fp.on_contra[hiud_accept_uids] = True
             sim.people.fp.ever_used_contra[hiud_accept_uids] = True
             method_dur = sim.connectors.contraception.set_dur_method(hiud_accept_uids)
             sim.people.fp.ti_contra[hiud_accept_uids] = self.ti + method_dur
             sim.people.menstruation.hiud_prone[hiud_accept_uids] = 1
-            
-            # Step 4: Offer TXA to those who declined hIUD
-            hiud_declined_uids = np.setdiff1d(package_offered_uids, hiud_accept_uids)
-            self.txa_offered[hiud_declined_uids] = True
-            txa_accept_uids = self.pars.prob_accept_txa.filter(hiud_declined_uids)
-            self.txa_accepted[txa_accept_uids] = True
-            print(f"Offered TXA: {len(hiud_declined_uids)}, Accepted: {len(txa_accept_uids)}")
-            
-            # Apply TXA
-            sim.people.menstruation.txa[txa_accept_uids] = True
-            
-            # Step 5: Offer pill to those who declined both hIUD and TXA
-            txa_declined_uids = np.setdiff1d(hiud_declined_uids, txa_accept_uids)
-            self.pill_offered[txa_declined_uids] = True
-            pill_accept_uids = self.pars.prob_accept_pill.filter(txa_declined_uids)
-            self.pill_accepted[pill_accept_uids] = True
-            print(f"Offered pill: {len(txa_declined_uids)}, Accepted: {len(pill_accept_uids)}")
-            
-            # Apply pill
-            sim.people.fp.method[pill_accept_uids] = self.pill_idx
-            sim.people.fp.on_contra[pill_accept_uids] = True
-            sim.people.fp.ever_used_contra[pill_accept_uids] = True
-            method_dur = sim.connectors.contraception.set_dur_method(pill_accept_uids)
-            sim.people.fp.ti_contra[pill_accept_uids] = self.ti + method_dur
             
             # Summary
             total_accepted = len(hiud_accept_uids) + len(txa_accept_uids) + len(pill_accept_uids)
