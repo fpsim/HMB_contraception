@@ -56,10 +56,10 @@ class Menstruation(ss.Connector):
             hmb_pred=sc.objdict(  # Parameters for HMB prediction
                 # Baseline odds that those prone to HMB will experience it this timestep
                 # This is converted to an intercept in the logistic regression: -np.log(1/base-1)
-                base=0.5,
-                pill = -np.log(1/((1 - 0.25*0.312) * 0.5) -1) - np.log(1/0.5 -1),
-                hiud = -np.log(1/((1-0.312) * 0.5) -1) - np.log(1/0.5 -1),
-                txa = -np.log(1/((1 - 0.5*0.312) * 0.5) -1) - np.log(1/0.5 -1),
+                base=0.95,
+                pill = -np.log(1/((1 - 0.25*0.312) * 0.95) -1) - np.log(1/0.95 -1),
+                hiud = -np.log(1/((1-0.312) * 0.95) -1) - np.log(1/0.95 -1),
+                txa = -np.log(1/((1 - 0.5*0.312) * 0.95) -1) - np.log(1/0.95 -1),
             ),
 
             # Non-permanent sequelae of HMB
