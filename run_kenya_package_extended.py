@@ -18,7 +18,6 @@ import gc
 # viz
 import seaborn as sns
 # starsim
-
 import starsim as ss
 # fpsim
 import fpsim as fp
@@ -35,11 +34,11 @@ from interventions import hiud_hmb, txa, pill_hmb, hmb_package
 
 
 # set the output directories
-plotfolder = 'figures2/'
-outfolder = 'results2/'
+plotfolder = 'figures_extended/'
+outfolder = 'results_extended/'
 
-plotfolder_stochastic = 'figures_stochastic2/'
-outfolder_stochastic = 'results_stochastic2/'
+plotfolder_stochastic = 'figures_stochastic_extended/'
+outfolder_stochastic = 'results_stochastic_extended/'
 
 for ff in [plotfolder, outfolder, plotfolder_stochastic, outfolder_stochastic]:
     if not os.path.exists(ff):
@@ -703,7 +702,7 @@ if __name__ == '__main__':
             all_results[scenario_name] = compute_and_save_scenario(scenario_name, scenario_sims)
         
         # Save combined results
-        sc.saveobj(outfolder + 'uptake-sweep_results-stats.obj', all_results)
+        sc.saveobj(outfolder_stochastic + 'uptake-sweep_results-stats.obj', all_results)
         print("Complete!")
         
         
@@ -721,7 +720,7 @@ if __name__ == '__main__':
                          'hmb', 'poor_mh', 'anemic', 'pain'],
             labels=[#'hIUD Usage', 'Pill Usage', 
                     'HMB', 'Poor MH', 'Anemia', 'Pain'],
-            plotfolder=plotfolder,
+            plotfolder=plotfolder_stochastic,
             filename='parameter_sweep_heatmaps.png'
         )
         
