@@ -160,8 +160,8 @@ class pill_hmb(ss.Intervention):
                     ~sim.people.fp.postpartum)
         self.define_states(
             ss.BoolState('intervention_applied', label="Received pill through intervention"),
-            ss.BoolState('pill_offered', label="Was offered TXA"),
-            ss.BoolState('pill_accepted', label="Accepted TXA"),
+            ss.BoolState('pill_offered', label="Was offered pill"),
+            ss.BoolState('pill_accepted', label="Accepted pill"),
         )
         return
 
