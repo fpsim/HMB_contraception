@@ -11,7 +11,7 @@ import pandas as pd
 class SocioDemographic(ss.Module):
     def __init__(self, name='sd'): 
         super().__init__(name=name)
-        self.define_states(ss.State('urban', default=ss.bernoulli(p=0.5)))
+        self.define_states(ss.BoolState('urban', default=ss.bernoulli(p=0.5)))
         return
 
     def init_results(self):
