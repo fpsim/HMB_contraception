@@ -41,24 +41,32 @@ class Education(ss.Module):
                 age_15_19=1.1,  # Adjustment for ages 15-19
                 age_20_24=-2,  # Adjustment for ages 20 and older
                 parity=1.,  # Adjustment for parity
-                # poor_mh=1.25,
-                # perceived_hmb=1.5  # Adjustment for HMB (encompasses both biomedical & perceived)
             ),
             init_dropout=ss.bernoulli(p=0.5),  # Initial dropout probability
+            disrupt_pars=sc.objdict( #Adding in parameters to represent schooling disruption without dropping out
+                intercept=-3, 
+                hmb=hmb_disrupt, # Context-specific probability of experiencing a schooling disruption
+            ),
+            init_disrupt=ss.bernoulli(p=0.5), # Iniitial disruption probability
         )
         self.update_pars(pars, **kwargs)
 
         # Probabilities of dropping out - calculated using data inputs
         self._p_dropout = ss.bernoulli(p=0)
 
+        # Probabilities of disruption of schooling
+        self._p_dropout = ss.bernoulli(p=0)
+
+
         # Define states
         self.define_states(
             ss.FloatArr('objective', default=self.get_obj_dist(objective_data)),  # Education objectives
             ss.FloatArr('attainment', default=0),  # Education attainment - initialized as 0, reset if data provided
-            ss.State('started', default=False),  # Whether education has been started
-            ss.State('in_school'),  # Currently in school
-            ss.State('completed'),  # Whether education is completed
-            ss.State('dropped'),  # Whether education was dropped
+            ss.BoolState('started', default=False),  # Whether education has been started
+            ss.BoolState('in_school'),  # Currently in school
+            ss.BoolState('completed'),  # Whether education is completed
+            ss.BoolState('dropped'),  # Whether education was dropped
+            ss.BoolState('disrupted'), # Whether schooling was disrupted for partial timestep
         )
 
         # Store things that will be processed after sim initialization
