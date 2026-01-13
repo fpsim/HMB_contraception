@@ -29,7 +29,7 @@ class Menstruation(ss.Connector):
             p_hiud=ss.bernoulli(p=0.17),
 
             # HMB prediction
-            # TODO: consider replacing this binary variable (HMB yes/now) with a continuous one representing blood loss
+            # TODO: consider replacing this binary variable (HMB yes/no) with a continuous one representing blood loss
             p_hmb_prone=ss.bernoulli(p=0.486),  # Proportion of menstruating women who experience HMB (sans interventions)
             
             # Odds ratios to create an age curve (currently calculated from Tanzania (Ibrihim 2023)) ---
