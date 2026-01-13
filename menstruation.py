@@ -54,7 +54,7 @@ class Menstruation(ss.Connector):
                 # Effect of tranexamic acid on HMB - placeholder
                 # Odds with TX is 1/(1+exp(-(0-2)))=0.119, i.e. reduces odds by ~76%
                 txa=-2,
-                # Effective of NSAIDs on HMB - placeholder
+                # Effect of NSAIDs on HMB - placeholder
                 # Assume about half as effective as TXA, so 1/(1+exp(-(0-1))) = 0.269
                 nsaid=-1
             ),
