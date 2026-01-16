@@ -232,7 +232,33 @@ class Menstruation(ss.Connector):
     def set_hmb(self, uids):
         """ Set who will experience heavy menstrual bleeding (HMB) """
         # Calculate the probability of HMB (based on interventions)
-        p_hmb = self._logistic(uids, self.pars.hmb_pred)
+        intercept = -np.log(1/self.pars.hmb_pred.base-1)
+        rhs = np.full_like(uids, fill_value=intercept, dtype=float)
+
+        # Add intervention effects
+        for term, val in self.pars.hmb_pred.items():
+            if term != 'base':
+                rhs += val * getattr(self, term)[uids]
+    
+        # Apply age-specific odds ratios
+        ages = self.sim.people.age[uids]
+        age_adjustments = np.zeros_like(uids, dtype=float)
+    
+        # Create age masks
+        age_15_19 = (ages >= 15) & (ages < 20)
+        age_20_44 = (ages >= 20) & (ages < 45)
+        age_45_plus = ages >= 45
+    
+        # Apply log(OR) for each age group
+        age_adjustments[age_15_19] = np.log(self.pars.hmb_age_OR["15-19"])
+        age_adjustments[age_20_44] = np.log(self.pars.hmb_age_OR["20-44"])
+        age_adjustments[age_45_plus] = np.log(self.pars.hmb_age_OR["45-59"])
+    
+        rhs += age_adjustments
+
+        # Calculate the probability
+        p_hmb = 1 / (1+np.exp(-rhs))
+    
         self._p_hmb.set(0)
         self._p_hmb.set(p_hmb)
         # filter returns True if p_hmb > 0.5
