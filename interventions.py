@@ -261,14 +261,24 @@ class hmb_package(ss.Intervention):
             package_offered_uids = self.pars.prob_offer.filter(elig_uids)
             self.package_offered[package_offered_uids] = True
             
-            # Step 3: Offer the three interventions in the package
-            # 3.1 TXA
-            self.txa_offered[package_offered_uids] = True
-            txa_accept_uids = self.pars.prob_accept_txa.filter(package_offered_uids)
-            self.txa_accepted[txa_accept_uids] = True
+            # Step 3: Offer the four interventions in the package in order: NSAID → TXA → Pill → hIUD
+
+            # 3.1 NSAID 
+            self.nsaid_offered[package_offered_uids] = True
+            nsaid_accept_uids = self.pars.prob_accept_nsaid.filter(package_offered_uids)
+            self.nsaid_accepted[nsaid_accept_uids] = True
+            sim.people.menstruation.nsaid[nsaid_accept_uids] = True
             
-            # 3.2 pill
-            txa_declined_uids = np.setdiff1d(package_offered_uids, txa_accept_uids)
+            # 3.2 TXA
+            nsaid_declined_uids = np.setdiff1d(package_offered_uids, nsaid_accept_uids)
+            self.txa_offered[nsaid_declined_uids] = True
+            txa_accept_uids = self.pars.prob_accept_txa.filter(nsaid_declined_uids)
+            self.txa_accepted[txa_accept_uids] = True
+            sim.people.menstruation.txa[txa_accept_uids] = True
+
+            
+            # 3.3 pill
+            txa_declined_uids = np.setdiff1d(nsaid_declined_uids, txa_accept_uids)
             self.pill_offered[txa_declined_uids] = True
             pill_accept_uids = self.pars.prob_accept_pill.filter(txa_declined_uids)
             self.pill_accepted[pill_accept_uids] = True
@@ -279,7 +289,7 @@ class hmb_package(ss.Intervention):
             method_dur = sim.connectors.contraception.set_dur_method(pill_accept_uids)
             sim.people.fp.ti_contra[pill_accept_uids] = self.ti + method_dur
             
-            # 3.3 hIUD
+            # 3.4 hIUD
             pill_declined_uids = np.setdiff1d(txa_declined_uids, pill_accept_uids)
             self.hiud_offered[pill_declined_uids] = True
             hiud_accept_uids = self.pars.prob_accept_hiud.filter(pill_declined_uids)
@@ -293,11 +303,12 @@ class hmb_package(ss.Intervention):
             sim.people.menstruation.hiud_prone[hiud_accept_uids] = 1
             
             # Summary
-            total_accepted = len(hiud_accept_uids) + len(txa_accept_uids) + len(pill_accept_uids)
+            total_accepted = len(nsaid_accept_uids) + len(hiud_accept_uids) + len(txa_accept_uids) + len(pill_accept_uids)
             print(f"Total who accepted any intervention: {total_accepted}")
-            print(f"  hIUD: {len(hiud_accept_uids)}")
+            print(f"  NSAID: {len(nsaid_accept_uids)}")
             print(f"  TXA: {len(txa_accept_uids)}")
             print(f"  Pill: {len(pill_accept_uids)}")
+            print(f"  hIUD: {len(hiud_accept_uids)}")
             print(f"  None: {len(package_offered_uids) - total_accepted}")
             
         return
