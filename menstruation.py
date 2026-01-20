@@ -236,6 +236,7 @@ class Menstruation(ss.Connector):
         rhs = np.full_like(uids, fill_value=intercept, dtype=float)
 
         # Add intervention effects
+        
         for term, val in self.pars.hmb_pred.items():
             if term != 'base':
                 rhs += val * getattr(self, term)[uids]
