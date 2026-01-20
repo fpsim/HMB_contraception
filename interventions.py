@@ -215,9 +215,10 @@ class hmb_package(ss.Intervention):
         self.define_pars(
             year=2026,
             prob_offer=ss.bernoulli(p=0.2),  # 20% offered the package
-            prob_accept_hiud=ss.bernoulli(p=0.5),  # 50% accept contraception
+            prob_accept_nsaid=ss.bernoulli(p=0.5), # 50% accept NSAID
             prob_accept_txa=ss.bernoulli(p=0.5),  # 50% accept TXA
             prob_accept_pill=ss.bernoulli(p=0.5),  # 50% accept pill
+            prob_accept_hiud=ss.bernoulli(p=0.5),  # 50% accept contraception
         )
         self.update_pars(pars, **kwargs)
         if eligibility is None:
@@ -230,12 +231,14 @@ class hmb_package(ss.Intervention):
                     )
         self.define_states(
             ss.BoolState('package_offered', label="Was offered HMB package"),
-            ss.BoolState('hiud_offered', label="Was offered hIUD"),
-            ss.BoolState('hiud_accepted', label="Accepted hIUD"),
+            ss.BoolState('nsaid_offered', label="Was offered NSAID"),
+            ss.BoolState('nsaid_accepted', label="Accepted NSAID"),
             ss.BoolState('txa_offered', label="Was offered TXA"),
             ss.BoolState('txa_accepted', label="Accepted TXA"),
             ss.BoolState('pill_offered', label="Was offered pill"),
             ss.BoolState('pill_accepted', label="Accepted pill"),
+            ss.BoolState('hiud_offered', label="Was offered hIUD"),
+            ss.BoolState('hiud_accepted', label="Accepted hIUD"),
         )
         return
     
