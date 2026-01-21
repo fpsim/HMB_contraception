@@ -111,6 +111,13 @@ class Menstruation(ss.Connector):
                 hmb=2,      # Effect of HMB on hysterectomy - placeholder
                 lt40=-5,    # Adjustment for women less than 40
             ),
+            
+            # School disruption parameters
+            hmb_school_disruption=sc.objdict(
+                base=0.1,      # Baseline probability of school disruption for menstruating students
+                hmb=2.0,       # Students with HMB have much higher odds
+                ),
+
         )
         
         self.update_pars(pars, **kwargs)
@@ -124,6 +131,7 @@ class Menstruation(ss.Connector):
         self._p_anemic = ss.bernoulli(p=0)
         self._p_pain = ss.bernoulli(p=0)
         self._p_hyst = ss.bernoulli(p=0)
+        self._p_school_disrupted = ss.bernoulli(p=0)
 
         # Define states
         self.define_states(
@@ -154,6 +162,12 @@ class Menstruation(ss.Connector):
             ss.BoolState('txa', label="Using tranexamic acid"),
             ss.BoolState('nsaid', label="Using NSAIDs"),
             ss.BoolState('hiud_prone', label="Prone to use hormonal IUD, if using IUD"),
+            
+            # School disruption states
+            ss.BoolState('school_disrupted', label="School disrupted this month due to menstruation"),
+            ss.IntArr('n_months_disrupted', label="Cumulative months of school disrupted"),
+            ss.IntArr('n_months_menstruating_student', label="Cumulative months as menstruating student"),
+
         )
 
         return
