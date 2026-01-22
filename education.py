@@ -47,7 +47,7 @@ class Education(ss.Module):
                 intercept=-3,  # Baseline disruption
                 hmb=2.6,         # Strong effect of HMB on disruption
                 ),
-            init_disrupt=ss.bernoulli(p=0.5), # Iniitial disruption probability
+            init_disrupt=ss.bernoulli(p=0.5), # Initial disruption probability
         )
         self.update_pars(pars, **kwargs)
 
@@ -204,6 +204,9 @@ class Education(ss.Module):
         """
         # Reset disruption status for this timestep
         self.disrupted[:] = False
+        
+        # Get the uids of individuals currently in school
+        uids = self.in_school.uids
         
         if len(uids) == 0:
             return
