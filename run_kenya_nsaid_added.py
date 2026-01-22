@@ -203,7 +203,7 @@ def plot_stochastic_results(stats, years, si, colors, scenarios_to_plot=None,
     
     set_font(20)
     
-    fig, axes = pl.subplots(2, 3, figsize=(15, 9))
+    fig, axes = pl.subplots(3, 3, figsize=(15, 9))
     axes = axes.ravel()
     
     lw = 2.5  # line width
@@ -560,8 +560,8 @@ if __name__ == '__main__':
         
         # Initialize dictionaries to store results for each scenario
         scenarios = ['baseline', 'hiud20', 'hiud40', 'txa20', 'pill20','nsaid20' , 'p20', 'p40', 'p60']
-        res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic', 'pain']
-        labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain']    
+        res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic', 'pain', , 'prop_disrupted']
+        labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain', 'Disruption']    
         
         # Dictionary to store all runs
         all_results = {scenario: {res: [] for res in res_to_plot} for scenario in scenarios}
@@ -584,7 +584,11 @@ if __name__ == '__main__':
             
             for scenario, sim in sims.items():
                 for res in res_to_plot:
-                    result = sim.results.menstruation[f'{res}_prev'][::12]
+                    # For disruption, use education results instead of menstruation
+                    if res == 'prop_disrupted':
+                        result = sim.results.edu[res][::12]
+                    else:
+                        result = sim.results.menstruation[f'{res}_prev'][::12]
                     all_results[scenario][res].append(result)
         
         # Convert to arrays and calculate statistics
@@ -653,7 +657,7 @@ if __name__ == '__main__':
         n_seeds = 20
         prob_offer_values = [0.25, 0.5, 0.75]
         prob_accept_values = [0.25, 0.5, 0.75]
-        res_keys = ['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain']
+        res_keys = ['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted']
         
         def compute_and_save_scenario(scenario_name, sim_list):
             """Run sims, compute stats, save, and free memory."""
@@ -663,7 +667,10 @@ if __name__ == '__main__':
             scenario_results = {res: [] for res in res_keys}
             for sim in msim.sims:
                 for res in res_keys:
-                    scenario_results[res].append(sim.results.menstruation[f'{res}_prev'][::12])
+                    if res == 'prop_disrupted':
+                        scenario_results[res].append(sim.results.edu[res][::12])
+                    else:
+                        scenario_results[res].append(sim.results.menstruation[f'{res}_prev'][::12])                    
             
             stats = {}
             for res in res_keys:
@@ -732,9 +739,9 @@ if __name__ == '__main__':
             prob_accept_values=prob_accept_values,
             intervention_start_year=2026,
             res_to_plot=[#'hiud', 'pill', 
-                         'hmb', 'poor_mh', 'anemic', 'pain'],
+                         'hmb', 'poor_mh', 'anemic', 'pain','prop_disrupted'],
             labels=[#'hIUD Usage', 'Pill Usage', 
-                    'HMB', 'Poor MH', 'Anemia', 'Pain'],
+                    'HMB', 'Poor MH', 'Anemia', 'Pain', 'Disruption'],
             plotfolder=plotfolder_stochastic,
             filename='parameter_sweep_heatmaps.png'
         )
