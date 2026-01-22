@@ -43,9 +43,7 @@ class Education(ss.Module):
                 parity=1.,  # Adjustment for parity
             ),
             init_dropout=ss.bernoulli(p=0.5),  # Initial dropout probability
-            disrupt_pars=sc.objdict( #Adding in parameters to represent schooling disruption without dropping out
-                hmb_effect=1.0,  # Effect size of HMB on disruption (log-odds scale)
-            ),
+            disrupt_pars=sc.objdict(),  # Parameters for schooling disruption (currently unused)
             init_disrupt=ss.bernoulli(p=0.5), # Iniitial disruption probability
         )
         self.update_pars(pars, **kwargs)
