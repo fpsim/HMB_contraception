@@ -89,6 +89,57 @@ class hiud_hmb(ss.Intervention):
             
         return
 
+class nsaid(ss.Intervention):
+    """
+    Standalone NSAID intervention for HMB
+    """
+    def __init__(self, pars=None, eligibility=None, **kwargs):
+        super().__init__(name='nsaid', eligibility=eligibility)
+        self.define_pars(
+            year=2026,  # When to apply the intervention
+            prob_offer=ss.bernoulli(p=0.1),  # Proportion of eligible people who are offered
+            prob_accept=ss.bernoulli(p=0.5),  # Proportion of those offered who accept        
+        )
+        self.update_pars(pars, **kwargs)
+        if eligibility is None:
+            self.eligibility = lambda sim: (
+                    sim.people.menstruation.hmb_prone &
+                    sim.people.menstruation.menstruating &
+                    ~sim.people.fp.pregnant &
+                    ~sim.people.fp.postpartum)
+        self.define_states(
+            ss.BoolState('intervention_applied', label="Received NSAID through intervention"),
+            ss.BoolState('nsaid_offered', label="Was offered NSAID"),
+            ss.BoolState('nsaid_accepted', label="Accepted NSAID"),
+        )
+        return
+
+    def step(self):
+        sim = self.sim
+        if sim.t.now() == self.pars.year:
+            # Print message
+            print('Offering NSAID for HMB')
+
+            # Step 1: Get eligible people
+            elig_uids = self.check_eligibility()
+            print(f"Eligible for intervention: {len(elig_uids)}")
+            
+            # Step 2: Randomly select to be offered the intervention
+            offered_uids = self.pars.prob_offer.filter(elig_uids)
+            self.nsaid_offered[offered_uids] = True
+            print(f"Offered intervention: {len(offered_uids)}")
+            
+            # Step 3: Of those offered, some accept
+            accept_uids = self.pars.prob_accept.filter(offered_uids)
+            self.nsaid_accepted[accept_uids] = True
+            print(f"Accepted intervention: {len(accept_uids)}")
+        
+            # Step 4: Apply the intervention to those who accepted            
+            sim.people.menstruation.nsaid[accept_uids] = True
+            self.intervention_applied[accept_uids] = True
+            
+        return
+    
 
 class txa(ss.Intervention):
     def __init__(self, pars=None, eligibility=None, **kwargs):
