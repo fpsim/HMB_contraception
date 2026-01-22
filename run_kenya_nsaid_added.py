@@ -708,7 +708,8 @@ if __name__ == '__main__':
                         prob_offer=prob_offer,
                         prob_accept_hiud=prob_accept,
                         prob_accept_txa=prob_accept,
-                        prob_accept_pill=prob_accept
+                        prob_accept_pill=prob_accept,
+                        prob_accept_nsaid=prob_accept
                     )
                 ]
                 scenario_sims.append(s_int)

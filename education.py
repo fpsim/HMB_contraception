@@ -43,9 +43,7 @@ class Education(ss.Module):
                 parity=1.,  # Adjustment for parity
             ),
             init_dropout=ss.bernoulli(p=0.5),  # Initial dropout probability
-            disrupt_pars=sc.objdict( #Adding in parameters to represent schooling disruption without dropping out
-                hmb_effect=1.0,  # Effect size of HMB on disruption (log-odds scale)
-            ),
+            disrupt_pars=sc.objdict(),  # Parameters for schooling disruption (currently unused)
             init_disrupt=ss.bernoulli(p=0.5), # Iniitial disruption probability
         )
         self.update_pars(pars, **kwargs)
@@ -275,8 +273,13 @@ class Education(ss.Module):
         else:
             self.results.prop_disrupted[self.ti] = 0
 
-        # Cumulative disruptions (count how many times each AGYW has been disrupted)
-        # This requires tracking across timesteps - simplified version counts current disrupted
-        self.results.n_disruptions[self.ti] = np.count_nonzero(self.disrupted[agyw])
+        # Cumulative disruptions (running total of disruption events among AGYW over time)
+        # Track across timesteps by accumulating the number disrupted each timestep
+        if self.ti == 0:
+            # Initialize accumulator on first timestep
+            self._cumulative_disruptions = 0
+        current_disruptions = np.count_nonzero(self.disrupted[agyw])
+        self._cumulative_disruptions += current_disruptions
+        self.results.n_disruptions[self.ti] = self._cumulative_disruptions
 
         return
