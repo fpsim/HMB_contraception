@@ -43,7 +43,10 @@ class Education(ss.Module):
                 parity=1.,  # Adjustment for parity
             ),
             init_dropout=ss.bernoulli(p=0.5),  # Initial dropout probability
-            disrupt_pars=sc.objdict(),  # Parameters for schooling disruption (currently unused)
+            disrupt_pars=sc.objdict(  
+                intercept=-3,  # Baseline disruption
+                hmb=2.6,         # Strong effect of HMB on disruption
+                ),
             init_disrupt=ss.bernoulli(p=0.5), # Iniitial disruption probability
         )
         self.update_pars(pars, **kwargs)
@@ -163,7 +166,6 @@ class Education(ss.Module):
             ss.Result('prop_dropped', label='AGYW: proportion dropped', scale=False),
             ss.Result('prop_disrupted', label='AGYW: proportion disrupted this timestep', scale=False),
             ss.Result('n_disruptions', label='AGYW: cumulative disruptions', scale=False),
-
         ]
         self.define_results(*results)
         return
@@ -197,20 +199,33 @@ class Education(ss.Module):
 
     def process_disruptions(self):
         """
-        Process schooling disruptions based on HMB status.
-        Only students currently in school and with HMB experience disruption.
+        Process schooling disruptions based on HMB status with probability.
+        Students with HMB have a probability of experiencing disruption each timestep.
         """
         # Reset disruption status for this timestep
         self.disrupted[:] = False
         
-        # Get students who are in school and have HMB
-        uids = self.in_school.uids
-        has_hmb = self.hmb[uids]
+        if len(uids) == 0:
+            return
+    
         
-        if np.any(has_hmb):
-            # Students with HMB experience disruption this timestep
-            hmb_students = uids[has_hmb]
-            self.disrupted[hmb_students] = True
+        p = self.pars.disrupt_pars
+        rhs = np.full_like(uids, fill_value=p.intercept, dtype=float)
+    
+        # Add covariates 
+        for term, val in p.items():
+            if term != 'intercept':
+                rhs += val * getattr(self, term)[uids]
+    
+        # Calculate probability - scale by dt for monthly timesteps
+        p_val = self.t.dt_year * (1 / (1 + np.exp(-rhs)))
+    
+        # Apply probability filter
+        self._p_disrupt.set(p_val)
+        is_disrupted = self._p_disrupt.filter(uids)
+    
+        # Set disruption status (but keep them in_school)
+        self.disrupted[is_disrupted] = True
         
         return
     
