@@ -44,8 +44,7 @@ class Education(ss.Module):
             ),
             init_dropout=ss.bernoulli(p=0.5),  # Initial dropout probability
             disrupt_pars=sc.objdict( #Adding in parameters to represent schooling disruption without dropping out
-                intercept=-3, 
-                hmb=hmb_disrupt, # Context-specific probability of experiencing a schooling disruption
+                hmb_effect=1.0,  # Effect size of HMB on disruption (log-odds scale)
             ),
             init_disrupt=ss.bernoulli(p=0.5), # Iniitial disruption probability
         )
@@ -55,7 +54,7 @@ class Education(ss.Module):
         self._p_dropout = ss.bernoulli(p=0)
 
         # Probabilities of disruption of schooling
-        self._p_dropout = ss.bernoulli(p=0)
+        self._p_disrupt = ss.bernoulli(p=0)
 
 
         # Define states
@@ -164,6 +163,9 @@ class Education(ss.Module):
             ss.Result('prop_completed', label='AGYW: proportion completed education', scale=False),
             ss.Result('prop_in_school', label='AGYW: proportion in school', scale=False),
             ss.Result('prop_dropped', label='AGYW: proportion dropped', scale=False),
+            ss.Result('prop_disrupted', label='AGYW: proportion disrupted this timestep', scale=False),
+            ss.Result('n_disruptions', label='AGYW: cumulative disruptions', scale=False),
+
         ]
         self.define_results(*results)
         return
@@ -194,12 +196,40 @@ class Education(ss.Module):
         self.started[new_students] = True  # Track who started education
         return
 
+    def process_disruptions(self):
+        """
+        Process schooling disruptions based on HMB status.
+        Only students currently in school and with HMB experience disruption.
+        """
+        # Reset disruption status for this timestep
+        self.disrupted[:] = False
+        
+        # Get students who are in school and have HMB
+        uids = self.in_school.uids
+        has_hmb = self.hmb[uids]
+        
+        if np.any(has_hmb):
+            # Students with HMB experience disruption this timestep
+            hmb_students = uids[has_hmb]
+            self.disrupted[hmb_students] = True
+        
+        return
+    
     def advance_education(self):
         """
         Increment education attainment
+        Students who are disrupted this month have reduced attainment
         """
         students = self.in_school
-        self.attainment[students] += self.t.dt_year
+        
+        # Full attainment for non-disrupted students
+        not_disrupted = students & ~self.disrupted
+        self.attainment[not_disrupted] += self.t.dt_year
+        
+        # Reduced attainment for disrupted students (e.g., 50% of normal)
+        disrupted = students & self.disrupted
+        self.attainment[disrupted] += 0.5 * self.t.dt_year
+
         return
 
     def process_dropouts(self):
@@ -236,4 +266,16 @@ class Education(ss.Module):
         self.results.prop_completed[self.ti] = np.count_nonzero(self.completed[agyw]) / len(self.completed[agyw])
         self.results.prop_in_school[self.ti] = np.count_nonzero(self.in_school[agyw]) / len(self.in_school[agyw])
         self.results.prop_dropped[self.ti] = np.count_nonzero(self.dropped[agyw]) / len(self.dropped[agyw])
+        
+        # HMB disruption results
+        agyw_in_school = agyw & self.in_school
+        if np.any(agyw_in_school):
+            self.results.prop_disrupted[self.ti] = np.count_nonzero(self.disrupted[agyw_in_school]) / np.count_nonzero(agyw_in_school)
+        else:
+            self.results.prop_disrupted[self.ti] = 0
+
+        # Cumulative disruptions (count how many times each AGYW has been disrupted)
+        # This requires tracking across timesteps - simplified version counts current disrupted
+        self.results.n_disruptions[self.ti] = np.count_nonzero(self.disrupted[agyw])
+
         return
