@@ -178,6 +178,7 @@ class Education(ss.Module):
 
     def step(self):
         self.start_education()  # Start school
+        self.process_disruptions() ## school disruption 
         self.advance_education()  # Advance attainment, determine who reaches their objective, process dropouts
         self.process_dropouts()  # Process dropouts
         self.graduate()  # Check if anyone achieves their education goal
