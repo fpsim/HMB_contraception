@@ -43,10 +43,14 @@ class Education(ss.Module):
                 parity=1.,  # Adjustment for parity
             ),
             init_dropout=ss.bernoulli(p=0.5),  # Initial dropout probability
-            disrupt_pars=sc.objdict(  
-                intercept=-3,  # Baseline disruption
-                hmb=2.6,         # Strong effect of HMB on disruption
-                ),
+            disrupt_pars=sc.objdict(  # Parameters for determining disruption probabilities
+                    base=0.01,        # Baseline disruption when no HMB
+                    hmb=2.6,          # Strong effect of HMB on disruption
+                    hiud=-1.0,        # Effect of hormonal IUD - reduces disruption
+                    pill=-1.0,        # Effect of pill - reduces disruption
+                    txa=-0.8,         # Effect of TXA - reduces disruption
+                    nsaid=-0.5,       # Effect of NSAID - reduces disruption
+                    ),
             init_disrupt=ss.bernoulli(p=0.5), # Initial disruption probability
         )
         self.update_pars(pars, **kwargs)
@@ -217,8 +221,14 @@ class Education(ss.Module):
     
         # Add covariates 
         for term, val in p.items():
-            if term != 'intercept':
-                rhs += val * getattr(self, term)[uids]
+            if term != 'base':
+                # For HMB, use local property
+                if term == 'hmb':
+                    rhs += val * getattr(self, term)[uids]
+                # For interventions (hiud, pill, txa, nsaid), get from menstruation module
+                else:
+                    if hasattr(self.sim.connectors, 'menstruation') and hasattr(self.sim.connectors.menstruation, term):
+                        rhs += val * getattr(self.sim.connectors.menstruation, term)[uids]
     
         # Calculate probability - scale by dt for monthly timesteps
         p_val = self.t.dt_year * (1 / (1 + np.exp(-rhs)))
