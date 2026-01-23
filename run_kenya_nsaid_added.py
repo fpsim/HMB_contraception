@@ -99,7 +99,7 @@ def make_sim(pars=None, stop=2021):
     sim = fp.Sim(
         start=2000,
         stop=stop,
-        n_agents=10000,
+        n_agents=1000,
         location='kenya',
         pars=pars,
         analyzers=[fp.cpr_by_age(), fp.method_mix_by_age()],
@@ -462,7 +462,7 @@ if __name__ == '__main__':
 
     if 'run_stochastic' in to_run:
         # run the scenarios for multiple random seeds
-        n_seeds = 50
+        n_seeds = 2
         
         colors = {
             'hiud20':  '#372248',    # dark purple
@@ -560,7 +560,7 @@ if __name__ == '__main__':
         
         # Initialize dictionaries to store results for each scenario
         scenarios = ['baseline', 'hiud20', 'hiud40', 'txa20', 'pill20','nsaid20' , 'p20', 'p40', 'p60']
-        res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic', 'pain', , 'prop_disrupted']
+        res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted']
         labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain', 'Disruption']    
         
         # Dictionary to store all runs
@@ -617,6 +617,8 @@ if __name__ == '__main__':
             stats=stats, years=years, si=si, colors=colors,
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
+            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption'],  
             filename='hmb_scenario-package_stochastic_results.png'
         )
         
@@ -625,6 +627,8 @@ if __name__ == '__main__':
             stats=stats, years=years, si=si, colors=colors,
             fixed_scale=True,
             plotfolder=plotfolder_stochastic,
+            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption'],  
             filename='hmb_scenario-package_stochastic_results_y-axis-scaled-0-100.png'
         )
         
@@ -637,6 +641,8 @@ if __name__ == '__main__':
             scenarios_to_plot=scenarios_subset,
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
+            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption'],  
             filename='hmb_package_stochastic_results_subset-scenarios.png'
         )
         
@@ -646,15 +652,29 @@ if __name__ == '__main__':
             scenarios_to_plot=scenarios_subset,
             fixed_scale=True,
             plotfolder=plotfolder_stochastic,
+            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption'],  
             filename='hmb_package_stochastic_results_subset-scenarios_y-axis-scaled-0-100.png'
         )
         
         
-        
+        # define the subset of scenarios
+        scenarios_subset = ['baseline', 'nsaid20']
+        # make the plots
+        plot_stochastic_results(
+            stats=stats, years=years, si=si, colors=colors,
+            scenarios_to_plot=scenarios_subset,
+            fixed_scale=False,
+            plotfolder=plotfolder_stochastic,
+            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption'],  
+           filename='hmb_package_stochastic_results_subset-scenarios2.png'
+        )
+   
     
     if 'run_coverage_sweep' in to_run:
                 
-        n_seeds = 20
+        n_seeds = 2
         prob_offer_values = [0.25, 0.5, 0.75]
         prob_accept_values = [0.25, 0.5, 0.75]
         res_keys = ['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted']
@@ -729,7 +749,7 @@ if __name__ == '__main__':
         
         
         # load
-        all_results = sc.loadobj(outfolder + 'uptake-sweep_results-stats.obj')
+        all_results = sc.loadobj(outfolder_stochastic + 'uptake-sweep_results-stats.obj')
         
         # Make heatmap
         fig, axes, change_matrices = plot_parameter_sweep_heatmaps_seaborn(
