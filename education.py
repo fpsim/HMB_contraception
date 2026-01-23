@@ -217,7 +217,7 @@ class Education(ss.Module):
     
         
         p = self.pars.disrupt_pars
-        rhs = np.full_like(uids, fill_value=p.intercept, dtype=float)
+        rhs = np.full_like(uids, fill_value=-np.log(1 / p.base - 1), dtype=float)
     
         # Add covariates 
         for term, val in p.items():
