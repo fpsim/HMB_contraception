@@ -44,8 +44,8 @@ class Education(ss.Module):
             ),
             init_dropout=ss.bernoulli(p=0.5),  # Initial dropout probability
             disrupt_pars=sc.objdict(  # Parameters for determining disruption probabilities
-                    base=0.01,        # Baseline disruption when no HMB
-                    hmb=2.6,          # Strong effect of HMB on disruption
+                    base=0.05,        # Baseline disruption when no HMB
+                    hmb=2.6,          # Strong effect of HMB on disruption hmb = np.log(0.1/(1-p1)) - np.log(base/(1-base))
                     hiud=-1.0,        # Effect of hormonal IUD - reduces disruption
                     pill=-1.0,        # Effect of pill - reduces disruption
                     txa=-0.8,         # Effect of TXA - reduces disruption
@@ -209,8 +209,8 @@ class Education(ss.Module):
         # Reset disruption status for this timestep
         self.disrupted[:] = False
         
-        # Get the uids of individuals currently in school
-        uids = self.in_school.uids
+        # Get the uids of individuals currently in school & menstruating
+        uids = (self.in_school & self.sim.people.menstruation.menstruating).uids
         
         if len(uids) == 0:
             return
@@ -230,8 +230,8 @@ class Education(ss.Module):
                     if hasattr(self.sim.connectors, 'menstruation') and hasattr(self.sim.connectors.menstruation, term):
                         rhs += val * getattr(self.sim.connectors.menstruation, term)[uids]
     
-        # Calculate probability - scale by dt for monthly timesteps
-        p_val = self.t.dt_year * (1 / (1 + np.exp(-rhs)))
+        # Calculate probability - monthly 
+        p_val =  (1 / (1 + np.exp(-rhs)))
     
         # Apply probability filter
         self._p_disrupt.set(p_val)
