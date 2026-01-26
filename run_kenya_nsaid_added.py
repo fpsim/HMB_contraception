@@ -325,15 +325,32 @@ def plot_parameter_sweep_heatmaps_seaborn(all_results, baseline_key='baseline',
                 
                 if scenario_name in all_results:
                     scenario_mean = all_results[scenario_name][res]['mean']
-                    scenario_post_avg = np.mean(scenario_mean[intervention_idx:])
                     
-                    if baseline_post_avg[res] != 0:
-                        pct_change = ((scenario_post_avg - baseline_post_avg[res]) / 
-                                      baseline_post_avg[res]) * 100
+                    if res == "n_disruptions":
+                        # Post-intervention total disruptions (end - value at intervention start)
+                        baseline_series = all_results[baseline_key][res]['mean']
+                        baseline_post_total = baseline_series[-1] - baseline_series[intervention_idx]
+
+                        scenario_post_total = scenario_mean[-1] - scenario_mean[intervention_idx]
+
+                        # Averted = baseline - scenario (positive means fewer disruptions)
+                        val = baseline_post_total - scenario_post_total
+
                     else:
-                        pct_change = 0
+                        # Your existing post-intervention average approach
+                        scenario_post_avg = np.mean(scenario_mean[intervention_idx:])
+                        base = baseline_post_avg[res]
+
+                        if res == "prop_disrupted":
+                            # absolute change in percentage points
+                            val = (scenario_post_avg - base) * 100.0
+                        else:
+                            # percent change from baseline
+                            val = 0.0 if base == 0 else ((scenario_post_avg - base) / base) * 100.0
+
+                matrix[j, i] = val
+
                     
-                    matrix[j, i] = pct_change  # Note: j,i for correct orientation
         
         change_matrices[res] = matrix
     
@@ -677,7 +694,7 @@ if __name__ == '__main__':
         n_seeds = 2
         prob_offer_values = [0.25, 0.5, 0.75]
         prob_accept_values = [0.25, 0.5, 0.75]
-        res_keys = ['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted']
+        res_keys = ['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted', 'n_disruptions']
         
         def compute_and_save_scenario(scenario_name, sim_list):
             """Run sims, compute stats, save, and free memory."""
@@ -687,7 +704,7 @@ if __name__ == '__main__':
             scenario_results = {res: [] for res in res_keys}
             for sim in msim.sims:
                 for res in res_keys:
-                    if res == 'prop_disrupted':
+                    if res in ['prop_disrupted', 'n_disruptions']:
                         scenario_results[res].append(sim.results.edu[res][::12])
                     else:
                         scenario_results[res].append(sim.results.menstruation[f'{res}_prev'][::12])                    
