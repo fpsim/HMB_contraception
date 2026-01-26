@@ -601,11 +601,24 @@ if __name__ == '__main__':
             
             for scenario, sim in sims.items():
                 for res in res_to_plot:
-                    # For disruption, use education results instead of menstruation
+                    def annualize_monthly(arr, how="mean"):
+                        arr = np.asarray(arr)
+                        n_years = len(arr)//12
+                        arr = arr[:12*n_years].reshape(n_years, 12)
+                        if how == "mean":
+                            return arr.mean(axis=1)
+                        elif how == "eoy":
+                            return arr[:, -1]
+                        else:
+                            raise ValueError(how)
+
                     if res == 'prop_disrupted':
-                        result = sim.results.edu[res][::12]
+                        result = annualize_monthly(sim.results.edu[res], how="mean")   # <- key change
+                    elif res == 'n_disruptions':
+                         result = annualize_monthly(sim.results.edu[res], how="eoy")    # <- key change
                     else:
-                        result = sim.results.menstruation[f'{res}_prev'][::12]
+                         result = sim.results.menstruation[f'{res}_prev'][::12]         # these are already prevalence-like; ok
+                   
                     all_results[scenario][res].append(result)
         
         # Convert to arrays and calculate statistics
@@ -704,11 +717,12 @@ if __name__ == '__main__':
             scenario_results = {res: [] for res in res_keys}
             for sim in msim.sims:
                 for res in res_keys:
-                    if res in ['prop_disrupted', 'n_disruptions']:
-                        scenario_results[res].append(sim.results.edu[res][::12])
+                    if res == 'prop_disrupted':
+                        scenario_results[res].append(annualize_monthly(sim.results.edu[res], how="mean"))
+                    elif res == 'n_disruptions':
+                        scenario_results[res].append(annualize_monthly(sim.results.edu[res], how="eoy"))
                     else:
-                        scenario_results[res].append(sim.results.menstruation[f'{res}_prev'][::12])                    
-            
+                        scenario_results[res].append(sim.results.menstruation[f'{res}_prev'][::12])            
             stats = {}
             for res in res_keys:
                 arr = np.array(scenario_results[res])
