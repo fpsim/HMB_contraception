@@ -210,7 +210,7 @@ class Education(ss.Module):
         self.disrupted[:] = False
         
         # Get the uids of individuals currently in school & menstruating
-        uids = (self.in_school & self.sim.people.menstruation.menstruating).uids
+        uids = self.in_school.uids
         
         if len(uids) == 0:
             return
