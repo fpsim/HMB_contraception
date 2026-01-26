@@ -776,9 +776,9 @@ if __name__ == '__main__':
             prob_accept_values=prob_accept_values,
             intervention_start_year=2026,
             res_to_plot=[#'hiud', 'pill', 
-                         'hmb', 'poor_mh', 'anemic', 'pain','prop_disrupted'],
+                         'hmb', 'poor_mh', 'anemic', 'pain','prop_disrupted','n_disruptions'],
             labels=[#'hIUD Usage', 'Pill Usage', 
-                    'HMB', 'Poor MH', 'Anemia', 'Pain', 'Disruption'],
+                    'HMB', 'Poor MH', 'Anemia', 'Pain', 'Disruption','# disruptions averted'],
             plotfolder=plotfolder_stochastic,
             filename='parameter_sweep_heatmaps.png'
         )
