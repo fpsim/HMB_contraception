@@ -29,6 +29,22 @@ from education import Education
 from interventions import hiud_hmb, txa, pill_hmb, hmb_package, nsaid
 
 
+# --- convert monthly time series to yearly ---
+def annualize_monthly(arr, how="mean"):
+    arr = np.asarray(arr)
+    if len(arr) < 12:
+        # Not enough months to form a year; return empty array for safety
+        return np.array([])
+    n_years = len(arr) // 12
+    arr = arr[:12 * n_years].reshape(n_years, 12)
+    if how == "mean":
+        return arr.mean(axis=1)
+    elif how == "eoy":
+        return arr[:, -1]
+    else:
+        raise ValueError(how)
+
+
 # updates:
     # - 100k agents
     # - 100 sim iters
@@ -216,9 +232,16 @@ def plot_stochastic_results(stats, years, si, colors, scenarios_to_plot=None,
             if scenario not in stats:
                 continue
             
-            mean = stats[scenario][res]['mean'][si:] * 100
-            lower = stats[scenario][res]['lower'][si:] * 100
-            upper = stats[scenario][res]['upper'][si:] * 100
+            # Ensure stats series align with the provided years array
+            ylen = len(years)
+            # take the last ylen elements in case stats include earlier years
+            mean = stats[scenario][res]['mean'][-ylen:] * 100
+            lower = stats[scenario][res]['lower'][-ylen:] * 100
+            upper = stats[scenario][res]['upper'][-ylen:] * 100
+
+            # quick debug check (optional)
+            if not (len(mean) == len(years) == len(lower) == len(upper)):
+                print(f"DEBUG SHAPES mismatch for {scenario} {res}: years={len(years)}, mean={len(mean)}, lower={len(lower)}, upper={len(upper)}")
             
             # Plot mean line
             ax.plot(years, mean, label=label_map.get(scenario, scenario), 
@@ -601,23 +624,12 @@ if __name__ == '__main__':
             
             for scenario, sim in sims.items():
                 for res in res_to_plot:
-                    def annualize_monthly(arr, how="mean"):
-                        arr = np.asarray(arr)
-                        n_years = len(arr)//12
-                        arr = arr[:12*n_years].reshape(n_years, 12)
-                        if how == "mean":
-                            return arr.mean(axis=1)
-                        elif how == "eoy":
-                            return arr[:, -1]
-                        else:
-                            raise ValueError(how)
-
                     if res == 'prop_disrupted':
-                        result = annualize_monthly(sim.results.edu[res], how="mean")   # <- key change
+                        result = annualize_monthly(sim.results.edu[res], how="mean")   
                     elif res == 'n_disruptions':
-                         result = annualize_monthly(sim.results.edu[res], how="eoy")    # <- key change
+                         result = annualize_monthly(sim.results.edu[res], how="eoy")    
                     else:
-                         result = sim.results.menstruation[f'{res}_prev'][::12]         # these are already prevalence-like; ok
+                         result = sim.results.menstruation[f'{res}_prev'][::12]         
                    
                     all_results[scenario][res].append(result)
         
