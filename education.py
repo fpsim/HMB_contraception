@@ -210,7 +210,7 @@ class Education(ss.Module):
         self.disrupted[:] = False
         
         # Get the uids of individuals currently in school & menstruating
-        uids = self.in_school.uids
+        uids = (self.in_school & self.sim.people.menstruation.menstruating).uids
         
         if len(uids) == 0:
             return
@@ -295,9 +295,10 @@ class Education(ss.Module):
         self.results.prop_dropped[self.ti] = np.count_nonzero(self.dropped[agyw]) / len(self.dropped[agyw])
         
         # HMB disruption results
-        agyw_in_school = agyw & self.in_school
-        if np.any(agyw_in_school):
-            self.results.prop_disrupted[self.ti] = np.count_nonzero(self.disrupted[agyw_in_school]) / np.count_nonzero(agyw_in_school)
+        agyw_in_school_menstruating = agyw & self.in_school & ppl.menstruation.menstruating
+        
+        if np.any(agyw_in_school_menstruating):
+            self.results.prop_disrupted[self.ti] = np.count_nonzero(self.disrupted[agyw_in_school_menstruating]) / np.count_nonzero(agyw_in_school_menstruating)
         else:
             self.results.prop_disrupted[self.ti] = 0
 
