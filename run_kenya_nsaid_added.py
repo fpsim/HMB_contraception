@@ -109,6 +109,7 @@ def make_sim(pars=None, stop=2021):
     mens = Menstruation()
     objective_data = pd.read_csv("data/kenya_objective.csv")
     attainment_data = pd.read_csv("data/kenya_initialization.csv")
+    births = ss.Births()
     edu = Education(objective_data=objective_data, attainment_data=attainment_data)
 
     # Run the sim
@@ -118,6 +119,7 @@ def make_sim(pars=None, stop=2021):
         n_agents=1000,
         location='kenya',
         pars=pars,
+        demographics=[births],
         analyzers=[fp.cpr_by_age(), fp.method_mix_by_age()],
         education_module=edu,
         connectors=[mens],
