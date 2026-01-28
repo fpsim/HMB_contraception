@@ -302,13 +302,25 @@ class Education(ss.Module):
         else:
             self.results.prop_disrupted[self.ti] = 0
 
-        # Cumulative disruptions (running total of disruption events among AGYW over time)
-        # Track across timesteps by accumulating the number disrupted each timestep
+        # Annual disruptions - reset at start of each year
+        # Initialize accumulator at start of simulation
         if self.ti == 0:
-            # Initialize accumulator on first timestep
-            self._cumulative_disruptions = 0
+            self._annual_disruptions = 0
+            self._last_year = self.sim.t.year
+    
+        # Count disruptions this timestep
         current_disruptions = np.count_nonzero(self.disrupted[agyw])
-        self._cumulative_disruptions += current_disruptions
-        self.results.n_disruptions[self.ti] = self._cumulative_disruptions
-
+    
+        # Check if we've moved to a new year
+        current_year = self.sim.t.year
+        if current_year != self._last_year:
+            # New year - reset the counter
+            self._annual_disruptions = current_disruptions
+            self._last_year = current_year
+        else:
+            # Same year - accumulate
+            self._annual_disruptions += current_disruptions
+    
+        self.results.n_disruptions[self.ti] = self._annual_disruptions
+        
         return
