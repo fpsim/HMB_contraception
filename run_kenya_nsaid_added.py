@@ -159,7 +159,7 @@ def set_font(size=None, font='Arial'):
 
 
 
-def plot_stochastic_results(stats, years, si, colors, scenarios_to_plot=None, 
+def plot_stochastic_results(stats, years_annual, years_monthly, si_annual, si_monthly, colors, scenarios_to_plot=None, 
                             res_to_plot=None, labels=None, label_map=None,
                             fixed_scale=False, filename=None, 
                             plotfolder=None):
@@ -171,10 +171,14 @@ def plot_stochastic_results(stats, years, si, colors, scenarios_to_plot=None,
     stats : dict
         Dictionary containing statistics for each scenario and result type.
         Structure: stats[scenario][result_type]['mean'/'lower'/'upper']
-    years : array
-        Array of years for x-axis (already sliced from si)
-    si : int
-        Start index for slicing results
+    years_annual : array
+        Array of years for x-axis for annual data 
+    years_monthly : array
+        Array of years for x-axis for monthly data 
+    si_annual : int
+        Start index for slicing annual results
+    si_monthly : int
+        Start index for slicing monthly results
     colors : dict
         Dictionary mapping scenario names to colors
     scenarios_to_plot : list, optional
@@ -226,6 +230,13 @@ def plot_stochastic_results(stats, years, si, colors, scenarios_to_plot=None,
     for i, res in enumerate(res_to_plot):
         ax = axes[i]
         
+        if res == 'prop_disrupted':
+            years = years_monthly
+            si = si_monthly
+        else:
+            years = years_annual
+            si = si_annual
+
         # Plot each scenario with uncertainty bands
         for scenario in scenarios_to_plot:
             if scenario not in stats:
