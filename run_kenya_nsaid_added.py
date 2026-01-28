@@ -595,8 +595,8 @@ if __name__ == '__main__':
         
         # Initialize dictionaries to store results for each scenario
         scenarios = ['baseline', 'hiud25', 'hiud50',  'p25', 'p50', 'p75']
-        res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted']
-        labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain', 'Disruption']    
+        res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions']
+        labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Number of disruptions averted']    
         
         # Dictionary to store all runs
         all_results = {scenario: {res: [] for res in res_to_plot} for scenario in scenarios}
@@ -619,7 +619,8 @@ if __name__ == '__main__':
             for scenario, sim in sims.items():
                 for res in res_to_plot:
                     if res == 'prop_disrupted':
-                        result = annualize_monthly(sim.results.edu[res], how="mean")   
+                        result = sim.results.edu[res]  # Keep monthly
+                        # result = annualize_monthly(sim.results.edu[res], how="mean")   
                     elif res == 'n_disruptions':
                          result = annualize_monthly(sim.results.edu[res], how="eoy")    
                     else:
@@ -641,10 +642,22 @@ if __name__ == '__main__':
                 stats[scenario][res]['q75'] = np.percentile(arr, 75, axis=0)
         
         # Get time vector
-        t = s_base.results.menstruation.timevec[::12]
-        years = np.array([y.year for y in t])
-        si = sc.findfirst(years, 2020)
-        years = years[si:]
+        # Get time vector - monthly for disruption, annual for others
+        t_annual = s_base.results.menstruation.timevec[::12]
+        years_annual = np.array([y.year for y in t_annual])
+        si_annual = sc.findfirst(years_annual, 2020)
+        years_annual = years_annual[si_annual:]
+
+        # Monthly time vector for disruption
+        t_monthly = s_base.results.edu.timevec
+        years_monthly = np.array([y.year + y.month/12 for y in t_monthly])
+        si_monthly = sc.findfirst(years_monthly >= 2020)
+        years_monthly = years_monthly[si_monthly:]
+        
+        # t = s_base.results.menstruation.timevec[::12]
+        # years = np.array([y.year for y in t])
+        # si = sc.findfirst(years, 2020)
+        # years = years[si:]
         
         set_font(20)
         
@@ -653,8 +666,8 @@ if __name__ == '__main__':
             stats=stats, years=years, si=si, colors=colors,
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
-            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption'],  
+            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Number of disruptions averted'],  
             filename='hmb_scenario-package_stochastic_results.png'
         )
         
@@ -663,8 +676,8 @@ if __name__ == '__main__':
             stats=stats, years=years, si=si, colors=colors,
             fixed_scale=True,
             plotfolder=plotfolder_stochastic,
-            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption'],  
+            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Number of disruptions averted'],  
             filename='hmb_scenario-package_stochastic_results_y-axis-scaled-0-100.png'
         )
         
@@ -677,8 +690,8 @@ if __name__ == '__main__':
             scenarios_to_plot=scenarios_subset,
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
-            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption'],  
+            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Number of disruptions averted'],  
             filename='hmb_package_stochastic_results_subset-scenarios.png'
         )
         
@@ -688,25 +701,12 @@ if __name__ == '__main__':
             scenarios_to_plot=scenarios_subset,
             fixed_scale=True,
             plotfolder=plotfolder_stochastic,
-            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption'],  
+            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Number of disruptions averted'],  
             filename='hmb_package_stochastic_results_subset-scenarios_y-axis-scaled-0-100.png'
         )
         
-        
-        # define the subset of scenarios
-        scenarios_subset = ['baseline', 'nsaid20']
-        # make the plots
-        plot_stochastic_results(
-            stats=stats, years=years, si=si, colors=colors,
-            scenarios_to_plot=scenarios_subset,
-            fixed_scale=False,
-            plotfolder=plotfolder_stochastic,
-            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption'],  
-           filename='hmb_package_stochastic_results_subset-scenarios2.png'
-        )
-   
+
     
     if 'run_coverage_sweep' in to_run:
                 
