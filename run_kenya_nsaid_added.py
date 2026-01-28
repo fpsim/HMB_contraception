@@ -220,7 +220,7 @@ def plot_stochastic_results(stats, years_annual, years_monthly, si_annual, si_mo
             'p75': 'Package 75% coverage'
         }
     
-    set_font(20)
+    set_font(10)
     
     fig, axes = pl.subplots(3, 3, figsize=(15, 9))
     axes = axes.ravel()
@@ -607,7 +607,7 @@ if __name__ == '__main__':
         # Initialize dictionaries to store results for each scenario
         scenarios = ['baseline', 'hiud25', 'hiud50',  'p25', 'p50', 'p75']
         res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions']
-        labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Number of disruptions averted']    
+        labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain', '% Disruption','Number of disruptions averted']    
         
         # Dictionary to store all runs
         all_results = {scenario: {res: [] for res in res_to_plot} for scenario in scenarios}
@@ -670,25 +670,35 @@ if __name__ == '__main__':
         # si = sc.findfirst(years, 2020)
         # years = years[si:]
         
-        set_font(20)
-        
+        import matplotlib.pyplot as plt
+
+        plt.rcParams['font.family'] = 'Arial'   # or 'Calibri', 'Times New Roman'
+        plt.rcParams['font.size'] = 10   
+        set_font(10)
+     
         # ---- PLOT: All scenarios, variable scale
         plot_stochastic_results(
-            stats=stats, years=years, si=si, colors=colors,
+            stats=stats, years_annual=years_annual, 
+            years_monthly=years_monthly,
+            si_annual=si_annual,
+            si_monthly=si_monthly, colors=colors,
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
             res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Number of disruptions averted'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', '% Disruption','Number of disruptions averted'],  
             filename='hmb_scenario-package_stochastic_results.png'
         )
         
         # ---- PLOT: All scenarios, fixed 0-100 scale
         plot_stochastic_results(
-            stats=stats, years=years, si=si, colors=colors,
+            stats=stats, years_annual=years_annual, 
+            years_monthly=years_monthly,
+            si_annual=si_annual,
+            si_monthly=si_monthly, colors=colors,
             fixed_scale=True,
             plotfolder=plotfolder_stochastic,
             res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Number of disruptions averted'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', '% Disruption','Number of disruptions averted'],  
             filename='hmb_scenario-package_stochastic_results_y-axis-scaled-0-100.png'
         )
         
@@ -697,23 +707,29 @@ if __name__ == '__main__':
         scenarios_subset = ['baseline', 'hiud25', 'hiud50', 'p50']
         # make the plots
         plot_stochastic_results(
-            stats=stats, years=years, si=si, colors=colors,
+            stats=stats, years_annual=years_annual, 
+            years_monthly=years_monthly,
+            si_annual=si_annual,
+            si_monthly=si_monthly,colors=colors,
             scenarios_to_plot=scenarios_subset,
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
             res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Number of disruptions averted'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', '% Disruption','Number of disruptions averted'],  
             filename='hmb_package_stochastic_results_subset-scenarios.png'
         )
         
         # ---- PLOT: Subset of scenarios, fixed 0-100 scale
         plot_stochastic_results(
-            stats=stats, years=years, si=si, colors=colors,
+            stats=stats, years_annual=years_annual, 
+            years_monthly=years_monthly,
+            si_annual=si_annual,
+            si_monthly=si_monthly, colors=colors,
             scenarios_to_plot=scenarios_subset,
             fixed_scale=True,
             plotfolder=plotfolder_stochastic,
             res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Number of disruptions averted'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', '% Disruption','Number of disruptions averted'],  
             filename='hmb_package_stochastic_results_subset-scenarios_y-axis-scaled-0-100.png'
         )
         
