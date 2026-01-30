@@ -769,7 +769,7 @@ if __name__ == '__main__':
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
             res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', '% Disruption','Number of disruptions averted'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Disruption'],  
             filename='hmb_scenario-package_stochastic_results.png'
         )
         
@@ -782,7 +782,7 @@ if __name__ == '__main__':
             fixed_scale=True,
             plotfolder=plotfolder_stochastic,
             res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', '% Disruption','Number of disruptions averted'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Disruption'],  
             filename='hmb_scenario-package_stochastic_results_y-axis-scaled-0-100.png'
         )
         
@@ -799,7 +799,7 @@ if __name__ == '__main__':
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
             res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', '% Disruption','Number of disruptions averted'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Disruption'],    
             filename='hmb_package_stochastic_results_subset-scenarios.png'
         )
         
@@ -813,7 +813,7 @@ if __name__ == '__main__':
             fixed_scale=True,
             plotfolder=plotfolder_stochastic,
             res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', '% Disruption','Number of disruptions averted'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Disruption'],  
             filename='hmb_package_stochastic_results_subset-scenarios_y-axis-scaled-0-100.png'
         )
         
