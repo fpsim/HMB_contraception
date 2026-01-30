@@ -173,6 +173,7 @@ class Menstruation(ss.Connector):
             ss.Result('pill_prev', scale=False, label="Prevalence of pill usage"),
             ss.Result('early_meno_prev', scale=False, label="Early menopause prevalence"),
             ss.Result('premature_meno_prev', scale=False, label="Premature menopause prevalence"),
+            ss.Result('n_anemia', scale=False, label="Cumulative anemia cases"),
         ]
         self.define_results(*results)
         return
@@ -346,6 +347,27 @@ class Menstruation(ss.Connector):
             self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.menstruating)
         for res in ['hyst', 'early_meno', 'premature_meno']:
             self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.post_menarche)
+            
+        # --- cumulative anemia cases per year ---
+        if self.ti == 0:
+            self._prev_anemic = self.anemic.copy()
+            self._annual_anemia_cases = 0
+            self._last_year_anemia = self.sim.t.year
+
+        mens = self.menstruating
+        new_cases = (~self._prev_anemic) & self.anemic & mens
+        current_new_cases = np.count_nonzero(new_cases)
+
+        current_year = self.sim.t.year
+        if current_year != self._last_year_anemia:
+            self._annual_anemia_cases = current_new_cases
+            self._last_year_anemia = current_year
+        else:
+            self._annual_anemia_cases += current_new_cases
+
+        self.results.n_anemia[ti] = self._annual_anemia_cases
+        self._prev_anemic = self.anemic.copy()
+
         return
 
 

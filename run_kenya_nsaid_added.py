@@ -385,26 +385,22 @@ def plot_parameter_sweep_heatmaps_seaborn(all_results, baseline_key='baseline',
                     scenario_mean = all_results[scenario_name][res]['mean']
                     
                     if res == "n_disruptions":
-                        # Post-intervention total disruptions (end - value at intervention start)
+                        # Post-intervention total disruptions 
                         baseline_series = all_results[baseline_key][res]['mean']
-                        baseline_post_total = baseline_series[-1] - baseline_series[intervention_idx]
-
-                        scenario_post_total = scenario_mean[-1] - scenario_mean[intervention_idx]
-
-                        # Averted = baseline - scenario (positive means fewer disruptions)
-                        val = baseline_post_total - scenario_post_total
+                        baseline_post_total = sum(baseline_series[intervention_idx:])
+                        scenario_post_total = sum(scenario_mean[intervention_idx:])
+                        val  = baseline_post_total - scenario_post_total
 
                     else:
                         # Your existing post-intervention average approach
                         scenario_post_avg = np.mean(scenario_mean[intervention_idx:])
                         base = baseline_post_avg[res]
 
-                        if res == "prop_disrupted":
-                            # absolute change in percentage points
-                            val = (scenario_post_avg - base) * 100.0
+                        if base == 0:
+                            # avoid divide-by-zero; set NaN or 0 depending on desired logic
+                            val = np.nan
                         else:
-                            # percent change from baseline
-                            val = 0.0 if base == 0 else ((scenario_post_avg - base) / base) * 100.0
+                            val = ((scenario_post_avg - base) / base) * 100.0
 
                 matrix[j, i] = val
 
@@ -434,6 +430,15 @@ def plot_parameter_sweep_heatmaps_seaborn(all_results, baseline_key='baseline',
             columns=[f'{int(p*100)}%' for p in prob_offer_values]
         )
         
+        
+        if res == 'n_disruptions':
+            cb_label = '# disruptions averted'
+            fmt = '.0f'
+        else:
+            cb_label = '% change'
+            fmt = '.1f'
+
+        
         # Plot heatmap
         sns.heatmap(df, 
                     ax=ax,
@@ -444,8 +449,8 @@ def plot_parameter_sweep_heatmaps_seaborn(all_results, baseline_key='baseline',
                     annot=True,
                     fmt='.1f',
                     annot_kws={'size': 11, 'weight': 'bold'},
-                    cbar=idx == 2,  # Only show colorbar for one panel
-                    cbar_kws={'label': '% Change'} if idx == 2 else {},
+                    cbar=True,  # Only show colorbar for one panel
+                    cbar_kws={'label': cb_label},
                     linewidths=0.5,
                     linecolor='white')
         
@@ -461,7 +466,7 @@ def plot_parameter_sweep_heatmaps_seaborn(all_results, baseline_key='baseline',
         else:
             ax.set_ylabel('')
     
-    fig.suptitle('Impact of Intervention by Coverage and Acceptability\n(% change from baseline)', 
+    fig.suptitle('Impact of Intervention by Coverage and Acceptability', 
                  fontsize=16, fontweight='bold', y=1.02)
     
     pl.tight_layout()
@@ -909,7 +914,7 @@ if __name__ == '__main__':
             res_to_plot=[#'hiud', 'pill', 
                          'hmb', 'poor_mh', 'anemic', 'pain','prop_disrupted','n_disruptions'],
             labels=[#'hIUD Usage', 'Pill Usage', 
-                    'HMB', 'Poor MH', 'Anemia', 'Pain', 'Disruption','# disruptions averted'],
+                    'HMB', 'Poor MH', 'Anemia', 'Pain', 'Disruption','Total disruptions averted (post-2026)'],
             plotfolder=plotfolder_stochastic,
             filename='parameter_sweep_heatmaps.png'
         )
