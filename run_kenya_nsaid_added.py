@@ -244,10 +244,31 @@ def plot_stochastic_results(stats, years_annual, years_monthly, si_annual, si_mo
             
             # Ensure stats series align with the provided years array
             ylen = len(years)
-            # take the last ylen elements in case stats include earlier years
-            mean = stats[scenario][res]['mean'][-ylen:] * 100
-            lower = stats[scenario][res]['lower'][-ylen:] * 100
-            upper = stats[scenario][res]['upper'][-ylen:] * 100
+            
+            if res == 'n_disruptions':
+                # compute "averted" relative to baseline for this year-range
+                # baseline series (last ylen elements)
+                base_mean = stats['baseline'][res]['mean'][-ylen:]
+                base_lower = stats['baseline'][res]['lower'][-ylen:]
+                base_upper = stats['baseline'][res]['upper'][-ylen:]
+
+                scen_mean = stats[scenario][res]['mean'][-ylen:]
+                scen_lower = stats[scenario][res]['lower'][-ylen:]
+                scen_upper = stats[scenario][res]['upper'][-ylen:]
+
+                # averted = baseline - scenario
+                mean = base_mean - scen_mean
+                # For CI on difference, use conservative bounds:
+                lower = base_lower - scen_upper
+                upper = base_upper - scen_lower
+
+               # keep units as counts (do NOT multiply by 100)
+            else:
+                
+                
+                mean = stats[scenario][res]['mean'][-ylen:] * 100
+                lower = stats[scenario][res]['lower'][-ylen:] * 100
+                upper = stats[scenario][res]['upper'][-ylen:] * 100
 
             # quick debug check (optional)
             if not (len(mean) == len(years) == len(lower) == len(upper)):
@@ -287,7 +308,11 @@ def plot_stochastic_results(stats, years_annual, years_monthly, si_annual, si_mo
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         
-        if i in [0, 3]:
+        if res == 'n_disruptions':
+            ax.set_ylabel('Number of disruptions averted')   # counts
+        elif res == 'prop_disrupted':
+            ax.set_ylabel('% Disruption')                    # monthly percent
+        elif i in [0, 3]:
             ax.set_ylabel('Prevalence (%)')
         
         if i >= 3:
@@ -601,6 +626,65 @@ if __name__ == '__main__':
                 sc.saveobj(outfolder_stochastic+f'kenya_package_package75_seed{seed}.sim', s_p75)
     
     
+    
+
+    # Convert to arrays and calculate statistics
+    stats = {scenario: {res: {} for res in res_to_plot} for scenario in scenarios}
+
+    for scenario in scenarios:
+        for res in res_to_plot:
+            arr = np.array(all_results[scenario][res])  # Shape: (n_seeds, time_points)
+            stats[scenario][res]['mean'] = np.mean(arr, axis=0)
+            stats[scenario][res]['median'] = np.median(arr, axis=0)
+            stats[scenario][res]['lower'] = np.percentile(arr, 2.5, axis=0)
+            stats[scenario][res]['upper'] = np.percentile(arr, 97.5, axis=0)
+            stats[scenario][res]['q25'] = np.percentile(arr, 25, axis=0)
+            stats[scenario][res]['q75'] = np.percentile(arr, 75, axis=0)
+
+    # --- Save results to CSV ---
+    print("Saving results to CSV...")
+
+    # Save annual metrics together
+    df_annual_data = {'year': years_annual}
+
+    for res in res_to_plot:
+        if res == 'prop_disrupted':
+            continue  # monthly stored separately
+        for scenario in scenarios:
+            series_mean = stats[scenario][res]['mean'][-len(years_annual):]
+            series_low  = stats[scenario][res]['lower'][-len(years_annual):]
+            series_up   = stats[scenario][res]['upper'][-len(years_annual):]
+
+            if res == 'n_disruptions':
+                # counts: keep as-is (no *100)
+                df_annual_data[f'{res}_{scenario}_mean'] = series_mean
+                df_annual_data[f'{res}_{scenario}_lower'] = series_low
+                df_annual_data[f'{res}_{scenario}_upper'] = series_up
+            else:
+                # proportions -> percent
+                df_annual_data[f'{res}_{scenario}_mean'] = series_mean * 100
+                df_annual_data[f'{res}_{scenario}_lower'] = series_low * 100
+                df_annual_data[f'{res}_{scenario}_upper'] = series_up * 100
+
+    df_annual = pd.DataFrame(df_annual_data)
+    csv_filename_annual = os.path.join(outfolder_stochastic, 'results_annual_metrics.csv')
+    df_annual.to_csv(csv_filename_annual, index=False)
+    print(f"Saved {csv_filename_annual}")
+
+    # Save monthly disruption data separately
+    df_monthly_data = {'year': years_monthly}
+
+    for scenario in scenarios:
+        df_monthly_data[f'prop_disrupted_{scenario}_mean'] = stats[scenario]['prop_disrupted']['mean'][-len(years_monthly):] * 100
+        df_monthly_data[f'prop_disrupted_{scenario}_lower'] = stats[scenario]['prop_disrupted']['lower'][-len(years_monthly):] * 100
+        df_monthly_data[f'prop_disrupted_{scenario}_upper'] = stats[scenario]['prop_disrupted']['upper'][-len(years_monthly):] * 100
+
+    df_monthly = pd.DataFrame(df_monthly_data)
+    csv_filename_monthly = os.path.join(outfolder_stochastic, 'results_monthly_disruption.csv')
+    df_monthly.to_csv(csv_filename_monthly, index=False)
+    print(f"Saved {csv_filename_monthly}")
+
+    print("All results saved to CSV!")    
         
         # --- aggregate results
         
