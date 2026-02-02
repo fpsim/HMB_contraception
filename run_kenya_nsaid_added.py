@@ -245,7 +245,7 @@ def plot_stochastic_results(stats, years_annual, years_monthly, si_annual, si_mo
             # Ensure stats series align with the provided years array
             ylen = len(years)
             
-            if res == 'n_disruptions':
+            if res in ("n_disruptions", "n_anemia"):
                 # compute "averted" relative to baseline for this year-range
                 # baseline series (last ylen elements)
                 base_mean = stats['baseline'][res]['mean'][-ylen:]
@@ -263,8 +263,7 @@ def plot_stochastic_results(stats, years_annual, years_monthly, si_annual, si_mo
                 upper = base_upper - scen_lower
 
                # keep units as counts (do NOT multiply by 100)
-            else:
-                
+            else:        
                 
                 mean = stats[scenario][res]['mean'][-ylen:] * 100
                 lower = stats[scenario][res]['lower'][-ylen:] * 100
@@ -312,6 +311,8 @@ def plot_stochastic_results(stats, years_annual, years_monthly, si_annual, si_mo
             ax.set_ylabel('Number of disruptions averted')   # counts
         elif res == 'prop_disrupted':
             ax.set_ylabel('% Disruption')                    # monthly percent
+        elif res == 'n_anemia':
+            ax.set_ylabel('Number of anemia cases averted')   # counts
         elif i in [0, 3]:
             ax.set_ylabel('Prevalence (%)')
         
@@ -384,7 +385,7 @@ def plot_parameter_sweep_heatmaps_seaborn(all_results, baseline_key='baseline',
                 if scenario_name in all_results:
                     scenario_mean = all_results[scenario_name][res]['mean']
                     
-                    if res == "n_disruptions":
+                    if res in ("n_disruptions", "n_anemia"):
                         # Post-intervention total disruptions 
                         baseline_series = all_results[baseline_key][res]['mean']
                         baseline_post_total = sum(baseline_series[intervention_idx:])
@@ -409,7 +410,7 @@ def plot_parameter_sweep_heatmaps_seaborn(all_results, baseline_key='baseline',
         change_matrices[res] = matrix
     
     # Create plot
-    fig, axes = pl.subplots(2, 3, figsize=(14, 10))
+    fig, axes = pl.subplots(3, 3, figsize=(18, 12))
     axes = axes.ravel()
     
     # Custom diverging palette
@@ -433,6 +434,9 @@ def plot_parameter_sweep_heatmaps_seaborn(all_results, baseline_key='baseline',
         
         if res == 'n_disruptions':
             cb_label = '# disruptions averted'
+            fmt = '.0f'
+        elif res == 'n_anemia':
+            cb_label = '# anemia cases averted'
             fmt = '.0f'
         else:
             cb_label = '% change'
@@ -660,7 +664,7 @@ if __name__ == '__main__':
             series_low  = stats[scenario][res]['lower'][-len(years_annual):]
             series_up   = stats[scenario][res]['upper'][-len(years_annual):]
 
-            if res == 'n_disruptions':
+            if res in ("n_disruptions", "n_anemia"):
                 # counts: keep as-is (no *100)
                 df_annual_data[f'{res}_{scenario}_mean'] = series_mean
                 df_annual_data[f'{res}_{scenario}_lower'] = series_low
@@ -695,8 +699,8 @@ if __name__ == '__main__':
         
         # Initialize dictionaries to store results for each scenario
         scenarios = ['baseline', 'hiud25', 'hiud50',  'p25', 'p50', 'p75']
-        res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions']
-        labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic', 'Pain', '% Disruption','Number of disruptions averted']    
+        res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic','n_anemia', 'pain', 'prop_disrupted','n_disruptions']
+        labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic','Number of anemia cases averted', 'Pain', '% Disruption','Number of disruptions averted']    
         
         # Dictionary to store all runs
         all_results = {scenario: {res: [] for res in res_to_plot} for scenario in scenarios}
@@ -722,7 +726,10 @@ if __name__ == '__main__':
                         result = sim.results.edu[res]  # Keep monthly
                         # result = annualize_monthly(sim.results.edu[res], how="mean")   
                     elif res == 'n_disruptions':
-                         result = annualize_monthly(sim.results.edu[res], how="eoy")    
+                         result = annualize_monthly(sim.results.edu[res], how="eoy") 
+                         
+                    elif res == 'n_anemia':
+                        result = annualize_monthly(sim.results.menstruation['n_anemia'], how="eoy")
                     else:
                          result = sim.results.menstruation[f'{res}_prev'][::12]         
                    
@@ -773,8 +780,8 @@ if __name__ == '__main__':
             si_monthly=si_monthly, colors=colors,
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
-            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Disruption'],  
+            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'n_anemia','pain', 'prop_disrupted','n_disruptions'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic','Number of anemia cases averted',  'Pain', 'Disruption','Disruption'],  
             filename='hmb_scenario-package_stochastic_results.png'
         )
         
@@ -786,8 +793,8 @@ if __name__ == '__main__':
             si_monthly=si_monthly, colors=colors,
             fixed_scale=True,
             plotfolder=plotfolder_stochastic,
-            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Disruption'],  
+            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic','n_anemia', 'pain', 'prop_disrupted','n_disruptions'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Number of anemia cases averted', 'Pain', 'Disruption','Disruption'],  
             filename='hmb_scenario-package_stochastic_results_y-axis-scaled-0-100.png'
         )
         
@@ -803,8 +810,8 @@ if __name__ == '__main__':
             scenarios_to_plot=scenarios_subset,
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
-            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Disruption'],    
+            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'n_anemia','pain', 'prop_disrupted','n_disruptions'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic','Number of anemia cases averted',  'Pain', 'Disruption','Disruption'],    
             filename='hmb_package_stochastic_results_subset-scenarios.png'
         )
         
@@ -817,8 +824,8 @@ if __name__ == '__main__':
             scenarios_to_plot=scenarios_subset,
             fixed_scale=True,
             plotfolder=plotfolder_stochastic,
-            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Pain', 'Disruption','Disruption'],  
+            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'n_anemia','pain', 'prop_disrupted','n_disruptions'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic','Number of anemia cases averted',  'Pain', 'Disruption','Disruption'],  
             filename='hmb_package_stochastic_results_subset-scenarios_y-axis-scaled-0-100.png'
         )
         
@@ -829,7 +836,7 @@ if __name__ == '__main__':
         n_seeds = 2
         prob_offer_values = [0.25, 0.5, 0.75]
         prob_accept_values = [0.25, 0.5, 0.75]
-        res_keys = ['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'pain', 'prop_disrupted', 'n_disruptions']
+        res_keys = ['hiud', 'pill', 'hmb', 'poor_mh', 'anemic','n_anemia', 'pain', 'prop_disrupted', 'n_disruptions']
         
         def compute_and_save_scenario(scenario_name, sim_list):
             """Run sims, compute stats, save, and free memory."""
@@ -912,9 +919,9 @@ if __name__ == '__main__':
             prob_accept_values=prob_accept_values,
             intervention_start_year=2026,
             res_to_plot=[#'hiud', 'pill', 
-                         'hmb', 'poor_mh', 'anemic', 'pain','prop_disrupted','n_disruptions'],
+                         'hmb', 'poor_mh', 'anemic', 'n_anemia','pain','prop_disrupted','n_disruptions'],
             labels=[#'hIUD Usage', 'Pill Usage', 
-                    'HMB', 'Poor MH', 'Anemia', 'Pain', 'Disruption','Total disruptions averted (post-2026)'],
+                    'HMB', 'Poor MH', 'Anemia', 'Number of anemia cases averted', 'Pain', 'Disruption','Total disruptions averted (post-2026)'],
             plotfolder=plotfolder_stochastic,
             filename='parameter_sweep_heatmaps.png'
         )
