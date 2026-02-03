@@ -697,16 +697,16 @@ if __name__ == '__main__':
         
         # --- aggregate results
         
-        # Initialize dictionaries to store results for each scenario
-        scenarios = ['baseline', 'hiud25', 'hiud50',  'p25', 'p50', 'p75']
-        res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic','n_anemia', 'pain', 'prop_disrupted','n_disruptions']
-        labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic','Number of anemia cases averted', 'Pain', '% Disruption','Number of disruptions averted']    
+    # Initialize dictionaries to store results for each scenario
+    scenarios = ['baseline', 'hiud25', 'hiud50',  'p25', 'p50', 'p75']
+    res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic','n_anemia', 'pain', 'prop_disrupted','n_disruptions']
+    labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic','Number of anemia cases averted', 'Pain', '% Disruption','Number of disruptions averted']    
         
-        # Dictionary to store all runs
-        all_results = {scenario: {res: [] for res in res_to_plot} for scenario in scenarios}
+    # Dictionary to store all runs
+    all_results = {scenario: {res: [] for res in res_to_plot} for scenario in scenarios}
     
-        # load individual files
-        for seed in range(n_seeds):
+    # load individual files
+    for seed in range(n_seeds):
             s_base = sc.loadobj(outfolder_stochastic+f'kenya_package_base_seed{seed}.sim')
             s_hiud25 = sc.loadobj(outfolder_stochastic+f'kenya_package_hiud-25_seed{seed}.sim')
             s_hiud50 = sc.loadobj(outfolder_stochastic+f'kenya_package_hiud-50_seed{seed}.sim')
