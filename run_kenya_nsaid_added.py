@@ -850,6 +850,8 @@ if __name__ == '__main__':
                         scenario_results[res].append(annualize_monthly(sim.results.edu[res], how="mean"))
                     elif res == 'n_disruptions':
                         scenario_results[res].append(annualize_monthly(sim.results.edu[res], how="eoy"))
+                    elif res == 'n_anemia':
+                        scenario_results[res].append(annualize_monthly(sim.results.menstruation['n_anemia'], how="eoy"))
                     else:
                         scenario_results[res].append(sim.results.menstruation[f'{res}_prev'][::12])            
             stats = {}
@@ -921,7 +923,7 @@ if __name__ == '__main__':
             res_to_plot=[#'hiud', 'pill', 
                          'hmb', 'poor_mh', 'anemic', 'n_anemia','pain','prop_disrupted','n_disruptions'],
             labels=[#'hIUD Usage', 'Pill Usage', 
-                    'HMB', 'Poor MH', 'Anemia', 'Number of anemia cases averted', 'Pain', 'Disruption','Total disruptions averted (post-2026)'],
+                    'HMB', 'Poor MH', 'Anemia', 'Total anemia cases averted (post-2026)', 'Pain', 'Disruption','Total disruptions averted (post-2026)'],
             plotfolder=plotfolder_stochastic,
             filename='parameter_sweep_heatmaps.png'
         )
