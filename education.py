@@ -71,6 +71,7 @@ class Education(ss.Module):
             ss.BoolState('completed'),  # Whether education is completed
             ss.BoolState('dropped'),  # Whether education was dropped
             ss.BoolState('disrupted'), # Whether schooling was disrupted for partial timestep
+            ss.FloatState('n_disruptions'), 
         )
 
         # Store things that will be processed after sim initialization
@@ -239,6 +240,7 @@ class Education(ss.Module):
     
         # Set disruption status (but keep them in_school)
         self.disrupted[is_disrupted] = True
+        self.n_disruptions[is_disrupted] += 1 #
         
         return
     
