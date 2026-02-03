@@ -52,6 +52,7 @@ class Education(ss.Module):
                     nsaid=-0.5,       # Effect of NSAID - reduces disruption
                     ),
             init_disrupt=ss.bernoulli(p=0.5), # Initial disruption probability
+            redcued_attainment = 0.5, #Reduced attainment for disrupted students
         )
         self.update_pars(pars, **kwargs)
 
@@ -257,7 +258,7 @@ class Education(ss.Module):
         
         # Reduced attainment for disrupted students (e.g., 50% of normal)
         disrupted = students & self.disrupted
-        self.attainment[disrupted] += 0.5 * self.t.dt_year
+        self.attainment[disrupted] += self.pars.redcued_attainment * self.t.dt_year
 
         return
 
