@@ -116,7 +116,7 @@ class nsaid(ss.Intervention):
 
     def step(self):
         sim = self.sim
-        if sim.t.now() == self.pars.year:
+        if sim.t.now() >= self.pars.year: #sustained intervention
             # Print message
             print('Offering NSAID for HMB')
 
@@ -166,7 +166,7 @@ class txa(ss.Intervention):
 
     def step(self):
         sim = self.sim
-        if sim.t.now() == self.pars.year:
+        if sim.t.now() >= self.pars.year: #sustained intervention
             # Print message
             print('Offering TXA for HMB')
 
@@ -223,7 +223,7 @@ class pill_hmb(ss.Intervention):
 
     def step(self):
         sim = self.sim
-        if sim.t.now() == self.pars.year:
+        if sim.t.now() >= self.pars.year: #sustained intervention
             # Print message
             print('Offering pill for HMB!')
             
@@ -303,7 +303,7 @@ class hmb_package(ss.Intervention):
     
     def step(self):
         sim = self.sim
-        if sim.t.now() == self.pars.year:
+        if sim.t.now() >= self.pars.year: #sustained intervention
             
             # Step 1: Get eligible people
             elig_uids = self.check_eligibility()
