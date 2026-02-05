@@ -58,7 +58,7 @@ class hiud_hmb(ss.Intervention):
     
     def step(self):
         sim = self.sim
-        if sim.t.now() == self.pars.year:
+        if sim.t.now() >= self.pars.year: #sustained intervention
             print('Offering hIUD for HMB!')
 
             # Step 1: Get eligible people
