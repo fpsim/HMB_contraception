@@ -315,7 +315,7 @@ class Education(ss.Module):
         current_disruptions = np.count_nonzero(self.disrupted[agyw])
     
         # Check if we've moved to a new year
-        current_year = self.sim.t.year
+        current_year = self.sim.t.now().year
         if current_year != self._last_year:
             # New year - reset the counter
             self._annual_disruptions = current_disruptions
@@ -323,7 +323,7 @@ class Education(ss.Module):
         else:
             # Same year - accumulate
             self._annual_disruptions += current_disruptions
-    
-        self.results.n_disruptions[self.ti] = self._annual_disruptions
-        
+
+        self.results.n_disruptions[self.ti] = current_disruptions
+
         return
