@@ -764,7 +764,7 @@ if __name__ == '__main__':
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
             res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'n_anemia','pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic','Number of anemia cases averted',  'Pain', 'Disruption','Disruption'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic','Anemia',  'Pain', 'Disruption','Disruption'],  
             filename='hmb_scenario-package_stochastic_results.png'
         )
         
@@ -777,7 +777,7 @@ if __name__ == '__main__':
             fixed_scale=True,
             plotfolder=plotfolder_stochastic,
             res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic','n_anemia', 'pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Number of anemia cases averted', 'Pain', 'Disruption','Disruption'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic', 'Anemia', 'Pain', 'Disruption','Disruption'],  
             filename='hmb_scenario-package_stochastic_results_y-axis-scaled-0-100.png'
         )
         
@@ -794,7 +794,7 @@ if __name__ == '__main__':
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
             res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'n_anemia','pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic','Number of anemia cases averted',  'Pain', 'Disruption','Disruption'],    
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic','Anemia',  'Pain', 'Disruption','Disruption'],    
             filename='hmb_package_stochastic_results_subset-scenarios.png'
         )
         
@@ -808,7 +808,7 @@ if __name__ == '__main__':
             fixed_scale=True,
             plotfolder=plotfolder_stochastic,
             res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'n_anemia','pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic','Number of anemia cases averted',  'Pain', 'Disruption','Disruption'],  
+            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic','Anemia',  'Pain', 'Disruption','Disruption'],  
             filename='hmb_package_stochastic_results_subset-scenarios_y-axis-scaled-0-100.png'
         )
         
@@ -913,6 +913,31 @@ if __name__ == '__main__':
         
             
             
+
+def results_to_dataframe(all_results, start_year=2000):
+    """
+    Convert all_results dict to a tidy pandas DataFrame.
+    """
+    rows = []
+    for scenario, res_dict in all_results.items():
+        for outcome, stats in res_dict.items():
+            for stat_name, series in stats.items():
+                for i, val in enumerate(series):
+                    rows.append({
+                        'scenario': scenario,
+                        'outcome': outcome,
+                        'stat': stat_name,     # mean / lower / upper
+                        'year': start_year + i,
+                        'value': val
+                    })
+    return pd.DataFrame(rows)
+    
+# ---- SAVE RESULTS AS CSV ----
+df_results = results_to_dataframe(all_results, start_year=2000)
+csv_path = outfolder_stochastic + 'uptake-sweep_results-stats.csv'
+df_results.to_csv(csv_path, index=False)
+print(f"Saved CSV to: {csv_path}")
+
             
             
             
