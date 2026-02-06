@@ -277,7 +277,7 @@ class hmb_package(ss.Intervention):
                     sim.people.menstruation.hmb_prone &
                     sim.people.menstruation.menstruating &
                     ~sim.people.fp.pregnant &
-                    #~sim.people.fp.postpartum & 
+                   # ~sim.people.fp.postpartum & 
                     (sim.connectors.fp.ti_delivery != sim.connectors.fp.ti)
                     )
         self.define_states(
