@@ -635,67 +635,8 @@ if __name__ == '__main__':
                 sc.saveobj(outfolder_stochastic+f'kenya_package_package75_seed{seed}.sim', s_p75)
     
     
-    
-
-    # Convert to arrays and calculate statistics
-    stats = {scenario: {res: {} for res in res_to_plot} for scenario in scenarios}
-
-    for scenario in scenarios:
-        for res in res_to_plot:
-            arr = np.array(all_results[scenario][res])  # Shape: (n_seeds, time_points)
-            stats[scenario][res]['mean'] = np.mean(arr, axis=0)
-            stats[scenario][res]['median'] = np.median(arr, axis=0)
-            stats[scenario][res]['lower'] = np.percentile(arr, 2.5, axis=0)
-            stats[scenario][res]['upper'] = np.percentile(arr, 97.5, axis=0)
-            stats[scenario][res]['q25'] = np.percentile(arr, 25, axis=0)
-            stats[scenario][res]['q75'] = np.percentile(arr, 75, axis=0)
-
-    # --- Save results to CSV ---
-    print("Saving results to CSV...")
-
-    # Save annual metrics together
-    df_annual_data = {'year': years_annual}
-
-    for res in res_to_plot:
-        if res == 'prop_disrupted':
-            continue  # monthly stored separately
-        for scenario in scenarios:
-            series_mean = stats[scenario][res]['mean'][-len(years_annual):]
-            series_low  = stats[scenario][res]['lower'][-len(years_annual):]
-            series_up   = stats[scenario][res]['upper'][-len(years_annual):]
-
-            if res in ("n_disruptions", "n_anemia"):
-                # counts: keep as-is (no *100)
-                df_annual_data[f'{res}_{scenario}_mean'] = series_mean
-                df_annual_data[f'{res}_{scenario}_lower'] = series_low
-                df_annual_data[f'{res}_{scenario}_upper'] = series_up
-            else:
-                # proportions -> percent
-                df_annual_data[f'{res}_{scenario}_mean'] = series_mean * 100
-                df_annual_data[f'{res}_{scenario}_lower'] = series_low * 100
-                df_annual_data[f'{res}_{scenario}_upper'] = series_up * 100
-
-    df_annual = pd.DataFrame(df_annual_data)
-    csv_filename_annual = os.path.join(outfolder_stochastic, 'results_annual_metrics.csv')
-    df_annual.to_csv(csv_filename_annual, index=False)
-    print(f"Saved {csv_filename_annual}")
-
-    # Save monthly disruption data separately
-    df_monthly_data = {'year': years_monthly}
-
-    for scenario in scenarios:
-        df_monthly_data[f'prop_disrupted_{scenario}_mean'] = stats[scenario]['prop_disrupted']['mean'][-len(years_monthly):] * 100
-        df_monthly_data[f'prop_disrupted_{scenario}_lower'] = stats[scenario]['prop_disrupted']['lower'][-len(years_monthly):] * 100
-        df_monthly_data[f'prop_disrupted_{scenario}_upper'] = stats[scenario]['prop_disrupted']['upper'][-len(years_monthly):] * 100
-
-    df_monthly = pd.DataFrame(df_monthly_data)
-    csv_filename_monthly = os.path.join(outfolder_stochastic, 'results_monthly_disruption.csv')
-    df_monthly.to_csv(csv_filename_monthly, index=False)
-    print(f"Saved {csv_filename_monthly}")
-
-    print("All results saved to CSV!")    
         
-        # --- aggregate results
+    # --- aggregate results
         
     # Initialize dictionaries to store results for each scenario
     scenarios = ['baseline', 'hiud25', 'hiud50',  'p25', 'p50', 'p75']
@@ -735,10 +676,10 @@ if __name__ == '__main__':
                    
                     all_results[scenario][res].append(result)
         
-        # Convert to arrays and calculate statistics
-        stats = {scenario: {res: {} for res in res_to_plot} for scenario in scenarios}
+    # Convert to arrays and calculate statistics
+    stats = {scenario: {res: {} for res in res_to_plot} for scenario in scenarios}
         
-        for scenario in scenarios:
+    for scenario in scenarios:
             for res in res_to_plot:
                 arr = np.array(all_results[scenario][res])  # Shape: (n_seeds, time_points)
                 stats[scenario][res]['mean'] = np.mean(arr, axis=0)
@@ -748,32 +689,74 @@ if __name__ == '__main__':
                 stats[scenario][res]['q25'] = np.percentile(arr, 25, axis=0)
                 stats[scenario][res]['q75'] = np.percentile(arr, 75, axis=0)
         
-        # Get time vector
-        # Get time vector - monthly for disruption, annual for others
-        t_annual = s_base.results.menstruation.timevec[::12]
-        years_annual = np.array([y.year for y in t_annual])
-        si_annual = sc.findfirst(years_annual, 2020)
-        years_annual = years_annual[si_annual:]
+    # Get time vector
+    # Get time vector - monthly for disruption, annual for others
+    t_annual = s_base.results.menstruation.timevec[::12]
+    years_annual = np.array([y.year for y in t_annual])
+    si_annual = sc.findfirst(years_annual, 2020)
+    years_annual = years_annual[si_annual:]
 
-        # Monthly time vector for disruption
-        t_monthly = s_base.results.edu.timevec
-        years_monthly = np.array([y.year + y.month/12 for y in t_monthly])
-        si_monthly = sc.findfirst(years_monthly >= 2020)
-        years_monthly = years_monthly[si_monthly:]
-        
-        # t = s_base.results.menstruation.timevec[::12]
-        # years = np.array([y.year for y in t])
-        # si = sc.findfirst(years, 2020)
-        # years = years[si:]
-        
-        import matplotlib.pyplot as plt
+    # Monthly time vector for disruption
+    t_monthly = s_base.results.edu.timevec
+    years_monthly = np.array([y.year + y.month/12 for y in t_monthly])
+    si_monthly = sc.findfirst(years_monthly >= 2020)
+    years_monthly = years_monthly[si_monthly:]
+    
+    
+    # --- Save results to CSV ---
+    print("Saving results to CSV...")
 
-        plt.rcParams['font.family'] = 'Arial'   # or 'Calibri', 'Times New Roman'
-        plt.rcParams['font.size'] = 10   
-        set_font(10)
+    # Save annual metrics together
+    df_annual_data = {'year': years_annual}
+
+    for res in res_to_plot:
+            if res == 'prop_disrupted':
+                continue  # monthly stored separately
+            for scenario in scenarios:
+                series_mean = stats[scenario][res]['mean'][-len(years_annual):]
+                series_low  = stats[scenario][res]['lower'][-len(years_annual):]
+                series_up   = stats[scenario][res]['upper'][-len(years_annual):]
+
+                if res in ("n_disruptions", "n_anemia"):
+                    # counts: keep as-is (no *100)
+                    df_annual_data[f'{res}_{scenario}_mean'] = series_mean
+                    df_annual_data[f'{res}_{scenario}_lower'] = series_low
+                    df_annual_data[f'{res}_{scenario}_upper'] = series_up
+                else:
+                    # proportions -> percent
+                    df_annual_data[f'{res}_{scenario}_mean'] = series_mean * 100
+                    df_annual_data[f'{res}_{scenario}_lower'] = series_low * 100
+                    df_annual_data[f'{res}_{scenario}_upper'] = series_up * 100
+
+    df_annual = pd.DataFrame(df_annual_data)
+    csv_filename_annual = os.path.join(outfolder_stochastic, 'results_annual_metrics.csv')
+    df_annual.to_csv(csv_filename_annual, index=False)
+    print(f"Saved {csv_filename_annual}")
+
+    # Save monthly disruption data separately
+    df_monthly_data = {'year': years_monthly}
+
+    for scenario in scenarios:
+            df_monthly_data[f'prop_disrupted_{scenario}_mean'] = stats[scenario]['prop_disrupted']['mean'][-len(years_monthly):] * 100
+            df_monthly_data[f'prop_disrupted_{scenario}_lower'] = stats[scenario]['prop_disrupted']['lower'][-len(years_monthly):] * 100
+            df_monthly_data[f'prop_disrupted_{scenario}_upper'] = stats[scenario]['prop_disrupted']['upper'][-len(years_monthly):] * 100
+
+    df_monthly = pd.DataFrame(df_monthly_data)
+    csv_filename_monthly = os.path.join(outfolder_stochastic, 'results_monthly_disruption.csv')
+    df_monthly.to_csv(csv_filename_monthly, index=False)
+    print(f"Saved {csv_filename_monthly}")
+
+    print("All results saved to CSV!")    
+
+                
+    import matplotlib.pyplot as plt
+
+    plt.rcParams['font.family'] = 'Arial'   # or 'Calibri', 'Times New Roman'
+    plt.rcParams['font.size'] = 10   
+    set_font(10)
      
         # ---- PLOT: All scenarios, variable scale
-        plot_stochastic_results(
+    plot_stochastic_results(
             stats=stats, years_annual=years_annual, 
             years_monthly=years_monthly,
             si_annual=si_annual,
@@ -786,7 +769,7 @@ if __name__ == '__main__':
         )
         
         # ---- PLOT: All scenarios, fixed 0-100 scale
-        plot_stochastic_results(
+    plot_stochastic_results(
             stats=stats, years_annual=years_annual, 
             years_monthly=years_monthly,
             si_annual=si_annual,
@@ -798,11 +781,11 @@ if __name__ == '__main__':
             filename='hmb_scenario-package_stochastic_results_y-axis-scaled-0-100.png'
         )
         
-        # ---- PLOT: Subset of scenarios, variable scale
-        # define the subset of scenarios
-        scenarios_subset = ['baseline', 'hiud25', 'hiud50', 'p50']
+    # ---- PLOT: Subset of scenarios, variable scale
+    # define the subset of scenarios
+    scenarios_subset = ['baseline', 'hiud25', 'hiud50', 'p50']
         # make the plots
-        plot_stochastic_results(
+    plot_stochastic_results(
             stats=stats, years_annual=years_annual, 
             years_monthly=years_monthly,
             si_annual=si_annual,
@@ -816,7 +799,7 @@ if __name__ == '__main__':
         )
         
         # ---- PLOT: Subset of scenarios, fixed 0-100 scale
-        plot_stochastic_results(
+    plot_stochastic_results(
             stats=stats, years_annual=years_annual, 
             years_monthly=years_monthly,
             si_annual=si_annual,
