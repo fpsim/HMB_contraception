@@ -333,7 +333,7 @@ class Menstruation(ss.Connector):
         self.menopausal[:] = f & (ppl.age > self.age_menopause)
         self.early_meno[:] = self.menopausal & (self.age_menopause < 45)
         self.premature_meno[:] = self.menopausal & (self.age_menopause < 40)
-        self.hmb_sus[:] = self.menstruating & self.hmb_prone & ~self.hmb
+        self.hmb_sus[:] = self.menstruating & self.hmb_prone & ~self.hmb & ~self.sim.people.fp.pregnant
 
         # Contraceptive methods
         pill_idx = cm.get_method_by_label('Pill').idx

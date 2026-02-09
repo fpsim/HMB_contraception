@@ -308,9 +308,9 @@ def plot_stochastic_results(stats, years_annual, years_monthly, si_annual, si_mo
         ax.spines['right'].set_visible(False)
         
         if res == 'n_disruptions':
-            ax.set_ylabel('Number of disruptions averted')   # counts
+            ax.set_ylabel('Schooling Disruptions Averted')   # counts
         elif res == 'prop_disrupted':
-            ax.set_ylabel('% Disruption')                    # monthly percent
+            ax.set_ylabel('Schooling Disruptions')                    # monthly percent
         elif res == 'n_anemia':
             ax.set_ylabel('Number of anemia cases averted')   # counts
         elif i in [0, 3]:
@@ -641,7 +641,7 @@ if __name__ == '__main__':
     # Initialize dictionaries to store results for each scenario
     scenarios = ['baseline', 'hiud25', 'hiud50',  'p25', 'p50', 'p75']
     res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic','n_anemia', 'pain', 'prop_disrupted','n_disruptions']
-    labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic','Number of anemia cases averted', 'Pain', '% Disruption','Number of disruptions averted']    
+    labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic','Number of anemia cases averted', 'Pain', 'Schooling Disruptions','Schooling Disruptions Averted']    
         
     # Dictionary to store all runs
     all_results = {scenario: {res: [] for res in res_to_plot} for scenario in scenarios}
@@ -906,7 +906,7 @@ if __name__ == '__main__':
             res_to_plot=[#'hiud', 'pill', 
                          'hmb', 'poor_mh', 'anemic', 'n_anemia','pain','prop_disrupted','n_disruptions'],
             labels=[#'hIUD Usage', 'Pill Usage', 
-                    'HMB', 'Poor MH', 'Anemia', 'Total anemia cases averted (post-2026)', 'Pain', 'Disruption','Total disruptions averted (post-2026)'],
+                    'HMB', 'Poor MH', 'Anemia', 'Total anemia cases averted (post-2026)', 'Pain', 'Schooling Disruptions','Total schooling disruptions averted (post-2026)'],
             plotfolder=plotfolder_stochastic,
             filename='parameter_sweep_heatmaps.png'
         )
