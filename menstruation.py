@@ -54,9 +54,9 @@ class Menstruation(ss.Connector):
             
             # Odds ratios to create an age curve (currently calculated from Tanzania (Ibrihim 2023)) ---
             hmb_age_OR = {
-            "15-19": 4.51,
-            "20-44": 0.67,
-            "45-59": 1.01,
+            "15-19": 3.85, # 1/0.26=3.85
+            "20-44": 0.62, # from Tanzania study, with reference group of "15-19", OR for 20-44 is 0.16; 0.16/0.26=0.62
+            "45-59": 1.00, # from Tanzania study, with reference group of "15-19", OR for 45-59 is 0.26; 
             },
 
             hmb_pred=sc.objdict(  # Parameters for HMB prediction
