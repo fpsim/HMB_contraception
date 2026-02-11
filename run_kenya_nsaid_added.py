@@ -27,6 +27,7 @@ from fpsim import plotting as plt
 from menstruation import Menstruation
 from education import Education
 from interventions import hiud_hmb, txa, pill_hmb, hmb_package, nsaid
+from interventions import HMBCarePathway
 
 
 # --- convert monthly time series to yearly ---
@@ -70,6 +71,17 @@ plt.Config.show_rmse = False
 
 
 
+# Create the pathway intervention
+pathway = HMBCarePathway(
+    year=2026,
+    prob_seek_care=ss.bernoulli(p=0.4),
+    effectiveness=sc.objdict(
+        nsaid=0.5,
+        txa=0.7,
+        pill=0.8,
+        hiud=0.9
+    ),
+)
 
 
 def make_pars():
@@ -124,6 +136,7 @@ def make_sim(pars=None, stop=2021):
         education_module=edu,
         connectors=[mens],
         verbose=0.1,
+        interventions=[pathway],
     )
 
     return sim
