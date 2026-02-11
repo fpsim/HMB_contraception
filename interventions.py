@@ -395,15 +395,7 @@ class HMBCarePathway(ss.Intervention):
             
                 # Care-seeking behavior
                 prob_seek_care=ss.bernoulli(p=0.3),
-            
-                # Treatment effectiveness (probability treatment works)
-                effectiveness=sc.objdict(
-                    nsaid=0.5,   # 50% effective
-                    txa=0.7,     # 70% effective
-                    pill=0.8,    # 80% effective
-                    hiud=0.9,    # 90% effective
-                ),
-            
+                        
                 # Adherence (probability of continuing if treatment works)
                 adherence=sc.objdict(
                     nsaid=0.7,
@@ -616,9 +608,12 @@ class HMBCarePathway(ss.Intervention):
     
         def assess_treatment_effectiveness(self):
             """
-            After time_to_assess, determine if treatment worked.
-            Following pathway: Does it work? → Yes/No
+            After time_to_assess months, check if HMB has improved.
+            
+            Treatment is considered effective if the person's HMB status has resolved.
+            The effect is determined by hmb_pred coefficients in menstruation.py
             """
+            
             # Find those ready to assess
             on_treatment_uids = (self.on_treatment & ~self.treatment_assessed).uids
         
@@ -634,21 +629,20 @@ class HMBCarePathway(ss.Intervention):
         
             # Assess each person
             for uid in ready_to_assess:
-                treatment = self.treatment_reverse_map[self.current_treatment[uid]]
-                effectiveness = self.pars.effectiveness[treatment]
+                has_hmb = self.sim.people.menstruation.hmb[uid]
             
-                # Randomly determine if effective
-                if np.random.random() < effectiveness:
-                    self.treatment_effective[uid] = True
-                    # Treatment worked - HMB should be reduced
-                    # (menstruation module handles this via nsaid/txa/pill/hiud states)
-                else:
+            if not has_hmb:
+                # HMB resolved - 
+                self.treatment_effective[uid] = True
+                # Person continues to adherence check
+            else:
+                # HMB still present - treatment not effective for this person
                     self.treatment_effective[uid] = False
-                    # Treatment failed - stop and try next option
+                    # Stop treatment and try next option in cascade
                     self._stop_treatment(uid, success=False)
-            
-                self.treatment_assessed[uid] = True
         
+            self.treatment_assessed[uid] = True
+    
             return
     
         def check_adherence(self):
