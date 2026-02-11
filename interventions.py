@@ -366,85 +366,85 @@ class hmb_package(ss.Intervention):
     
     
     class HMBCarePathway(ss.Intervention):
-    """
-    Sequential HMB treatment cascade following the intervention pathway.
-    Implements: HMB → Care-seeking → NSAID → TXA → Pill → hIUD
+        """
+        Sequential HMB treatment cascade following the intervention pathway.
+        Implements: HMB → Care-seeking → NSAID → TXA → Pill → hIUD
     
-    Each individual progresses through treatments based on:
-    - Care-seeking behavior
-    - Treatment effectiveness
-    - Adherence
-    - Fertility intent 
-    """
+        Each individual progresses through treatments based on:
+            - Care-seeking behavior
+            - Treatment effectiveness
+            - Adherence
+            - Fertility intent 
+            """
     
-    def __init__(self, pars=None, eligibility=None, **kwargs):
-        super().__init__(name='hmb_care_pathway', eligibility=eligibility)
+        def __init__(self, pars=None, eligibility=None, **kwargs):
+            super().__init__(name='hmb_care_pathway', eligibility=eligibility)
         
-        self.define_pars(
-            year=2026,  # When intervention starts
+            self.define_pars(
+                year=2026,  # When intervention starts
             
-            # Care-seeking behavior
-            prob_seek_care=ss.bernoulli(p=0.3),
+                # Care-seeking behavior
+                prob_seek_care=ss.bernoulli(p=0.3),
             
-            # Treatment effectiveness (probability treatment works)
-            effectiveness=sc.objdict(
-                nsaid=0.5,   # 50% effective
-                txa=0.7,     # 70% effective
-                pill=0.8,    # 80% effective
-                hiud=0.9,    # 90% effective
-            ),
+                # Treatment effectiveness (probability treatment works)
+                effectiveness=sc.objdict(
+                    nsaid=0.5,   # 50% effective
+                    txa=0.7,     # 70% effective
+                    pill=0.8,    # 80% effective
+                    hiud=0.9,    # 90% effective
+                ),
             
-            # Adherence (probability of continuing if treatment works)
-            adherence=sc.objdict(
-                nsaid=0.7,
-                txa=0.6,
-                pill=0.75,
-                hiud=0.85,
-            ),
+                # Adherence (probability of continuing if treatment works)
+                adherence=sc.objdict(
+                    nsaid=0.7,
+                    txa=0.6,
+                    pill=0.75,
+                    hiud=0.85,
+                ),
             
-            # Timing parameters
-            time_to_assess=3,  # Months before assessing effectiveness
-            treatment_duration_months=sc.objdict(
-                nsaid=12,
-                txa=12,
-                pill=24,
-                hiud=60,  # 5 years
-            ),
-        )
-        
-        self.update_pars(pars, **kwargs)
-        
-        # Default eligibility: menstruating, non-pregnant women experiencing HMB
-        if eligibility is None:
-            self.eligibility = lambda sim: (
-                sim.people.menstruation.hmb &  # Currently experiencing HMB
-                sim.people.menstruation.menstruating &
-                ~sim.people.fp.pregnant &
-                ~sim.people.fp.postpartum
+                # Timing parameters
+                time_to_assess=3,  # Months before assessing effectiveness
+                treatment_duration_months=sc.objdict(
+                    nsaid=12,
+                    txa=12,
+                    pill=24,
+                    hiud=60,  # 5 years
+                ),
             )
         
-        # Define states for tracking cascade
-        self.define_states(
-            # Treatment history
-            ss.BoolState('seeking_care', default=False),
-            ss.BoolState('tried_nsaid', default=False),
-            ss.BoolState('tried_txa', default=False),
-            ss.BoolState('tried_pill', default=False),
-            ss.BoolState('tried_hiud', default=False),
-            
-            # Current treatment status
-            ss.StringState('current_treatment', default='none'),
-            ss.BoolState('on_treatment', default=False),
-            ss.FloatArr('treatment_start_ti', default=-1),
-            ss.FloatArr('treatment_duration', default=0),
-            
-            # Treatment outcomes
-            ss.BoolState('treatment_effective', default=False),
-            ss.BoolState('treatment_assessed', default=False),
-            ss.BoolState('adherent', default=False),
-        )
+            self.update_pars(pars, **kwargs)
         
-        return
+            # Default eligibility: menstruating, non-pregnant women experiencing HMB
+            if eligibility is None:
+                self.eligibility = lambda sim: (
+                    sim.people.menstruation.hmb &  # Currently experiencing HMB
+                    sim.people.menstruation.menstruating &
+                    ~sim.people.fp.pregnant &
+                    ~sim.people.fp.postpartum
+                )
+        
+            # Define states for tracking cascade
+            self.define_states(
+                # Treatment history
+                ss.BoolState('seeking_care', default=False),
+                ss.BoolState('tried_nsaid', default=False),
+                ss.BoolState('tried_txa', default=False),
+                ss.BoolState('tried_pill', default=False),
+                ss.BoolState('tried_hiud', default=False),
+            
+                # Current treatment status
+                ss.StringState('current_treatment', default='none'),
+                ss.BoolState('on_treatment', default=False),
+                ss.FloatArr('treatment_start_ti', default=-1),
+                ss.FloatArr('treatment_duration', default=0),
+            
+                # Treatment outcomes
+                ss.BoolState('treatment_effective', default=False),
+                ss.BoolState('treatment_assessed', default=False),
+                ss.BoolState('adherent', default=False),
+            )
+        
+            return
     
     def init_results(self):
         """Initialize results for cascade tracking"""
