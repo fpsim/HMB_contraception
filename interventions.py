@@ -365,7 +365,7 @@ class hmb_package(ss.Intervention):
         return
     
     
-    class HMBCarePathway(ss.Intervention):
+class HMBCarePathway(ss.Intervention):
         """
         Sequential HMB treatment cascade following the intervention pathway.
         Implements: HMB → Care-seeking → NSAID → TXA → Pill → hIUD
@@ -376,6 +376,16 @@ class hmb_package(ss.Intervention):
             - Adherence
             - Fertility intent 
             """
+        # Treatment encoding mapping
+        treatment_map = {
+            'none': 0,
+            'nsaid': 1,
+            'txa': 2,
+            'pill': 3,
+            'hiud': 4,
+        }
+    
+        treatment_reverse_map = {v: k for k, v in treatment_map.items()}
     
         def __init__(self, pars=None, eligibility=None, **kwargs):
             super().__init__(name='hmb_care_pathway', eligibility=eligibility)
@@ -433,7 +443,7 @@ class hmb_package(ss.Intervention):
                 ss.BoolState('tried_hiud', default=False),
             
                 # Current treatment status
-                ss.StringState('current_treatment', default='none'),
+                ss.FloatArr('current_treatment', default=0), # 0=none, 1=nsaid, 2=txa, 3=pill, 4=hiud
                 ss.BoolState('on_treatment', default=False),
                 ss.FloatArr('treatment_start_ti', default=-1),
                 ss.FloatArr('treatment_duration', default=0),
@@ -446,355 +456,355 @@ class hmb_package(ss.Intervention):
         
             return
     
-    def init_results(self):
-        """Initialize results for cascade tracking"""
-        super().init_results()
-        results = [
-            ss.Result('seeking_care_prev', scale=False, label="Proportion seeking care"),
-            ss.Result('on_nsaid_prev', scale=False, label="Proportion on NSAID"),
-            ss.Result('on_txa_prev', scale=False, label="Proportion on TXA"),
-            ss.Result('on_pill_hmb_prev', scale=False, label="Proportion on pill for HMB"),
-            ss.Result('on_hiud_hmb_prev', scale=False, label="Proportion on hIUD for HMB"),
-            ss.Result('on_any_treatment_prev', scale=False, label="Proportion on any treatment"),
-            ss.Result('treatment_success_rate', scale=False, label="Treatment success rate"),
-            ss.Result('adherence_rate', scale=False, label="Adherence rate"),
-            ss.Result('cascade_step_0', scale=False, label="No treatment tried"),
-            ss.Result('cascade_step_1', scale=False, label="Tried NSAID"),
-            ss.Result('cascade_step_2', scale=False, label="Tried TXA"),
-            ss.Result('cascade_step_3', scale=False, label="Tried Pill"),
-            ss.Result('cascade_step_4', scale=False, label="Tried hIUD"),
-        ]
-        self.define_results(*results)
-        return
-    
-    @property
-    def pill_idx(self):
-        """Get pill method index"""
-        return self.sim.connectors.contraception.get_method_by_label('Pill').idx
-    
-    @property
-    def iud_idx(self):
-        """Get IUD method index"""
-        return self.sim.connectors.contraception.get_method_by_label('IUDs').idx
-    
-    def step(self):
-        """Execute cascade at each timestep"""
-        # Only run if intervention has started
-        if self.sim.t.now() < self.pars.year:
+        def init_results(self):
+            """Initialize results for cascade tracking"""
+            super().init_results()
+            results = [
+                ss.Result('seeking_care_prev', scale=False, label="Proportion seeking care"),
+                ss.Result('on_nsaid_prev', scale=False, label="Proportion on NSAID"),
+                ss.Result('on_txa_prev', scale=False, label="Proportion on TXA"),
+                ss.Result('on_pill_hmb_prev', scale=False, label="Proportion on pill for HMB"),
+                ss.Result('on_hiud_hmb_prev', scale=False, label="Proportion on hIUD for HMB"),
+                ss.Result('on_any_treatment_prev', scale=False, label="Proportion on any treatment"),
+                ss.Result('treatment_success_rate', scale=False, label="Treatment success rate"),
+                ss.Result('adherence_rate', scale=False, label="Adherence rate"),
+                ss.Result('cascade_step_0', scale=False, label="No treatment tried"),
+                ss.Result('cascade_step_1', scale=False, label="Tried NSAID"),
+                ss.Result('cascade_step_2', scale=False, label="Tried TXA"),
+                ss.Result('cascade_step_3', scale=False, label="Tried Pill"),
+                ss.Result('cascade_step_4', scale=False, label="Tried hIUD"),
+            ]
+            self.define_results(*results)
             return
-        
-        # 1. Determine who seeks care
-        self.determine_care_seeking()
-        
-        # 2. Offer next treatment in cascade
-        self.offer_treatment()
-        
-        # 3. Update treatment duration
-        self.update_treatment_duration()
-        
-        # 4. Assess treatment effectiveness
-        self.assess_treatment_effectiveness()
-        
-        # 5. Check adherence
-        self.check_adherence()
-        
-        return
     
-    def determine_care_seeking(self):
-        """
-        Determine who seeks care for HMB this timestep.
-        Following the pathway: HMB → Seeking care?
-        """
-        # Eligible: currently have HMB, not already seeking care, not on treatment
-        eligible = (
-            self.sim.people.menstruation.hmb &
-            ~self.seeking_care &
-            ~self.on_treatment &
-            self.sim.people.menstruation.menstruating &
-            ~self.sim.people.fp.pregnant
-        ).uids
-        
-        if len(eligible) == 0:
-            return
-        
-        # Randomly select who seeks care
-        seek_care_uids = self.pars.prob_seek_care.filter(eligible)
-        self.seeking_care[seek_care_uids] = True
-        
-        return
+        @property
+        def pill_idx(self):
+            """Get pill method index"""
+            return self.sim.connectors.contraception.get_method_by_label('Pill').idx
     
-    def offer_treatment(self):
-        """
-        Offer next treatment in cascade: NSAID → TXA → Pill → hIUD
-        Skip pill/hIUD if fertility_intent = True
-        """
-        # Eligible: seeking care, not currently on treatment
-        eligible = (self.seeking_care & ~self.on_treatment).uids
+        @property
+        def iud_idx(self):
+            """Get IUD method index"""
+            return self.sim.connectors.contraception.get_method_by_label('IUDs').idx
+    
+        def step(self):
+            """Execute cascade at each timestep"""
+            # Only run if intervention has started
+            if self.sim.t.now() < self.pars.year:
+                return
         
-        if len(eligible) == 0:
+            # 1. Determine who seeks care
+            self.determine_care_seeking()
+        
+            # 2. Offer next treatment in cascade
+            self.offer_treatment()
+        
+            # 3. Update treatment duration
+            self.update_treatment_duration()
+        
+            # 4. Assess treatment effectiveness
+            self.assess_treatment_effectiveness()
+        
+            # 5. Check adherence
+            self.check_adherence()
+        
             return
+    
+        def determine_care_seeking(self):
+            """
+            Determine who seeks care for HMB this timestep.
+            Following the pathway: HMB → Seeking care?
+            """
+            # Eligible: currently have HMB, not already seeking care, not on treatment
+            eligible = (
+                self.sim.people.menstruation.hmb &
+                ~self.seeking_care &
+                ~self.on_treatment &
+                self.sim.people.menstruation.menstruating &
+                ~self.sim.people.fp.pregnant
+            ).uids
         
-        # Get fertility intent from FPsim
-        fertility_intent = self.sim.people.fp.fertility_intent
+            if len(eligible) == 0:
+                return
         
-        for uid in eligible:
-            # Determine next treatment based on what's been tried
-            if not self.tried_nsaid[uid]:
-                self._start_treatment(uid, 'nsaid')
+            # Randomly select who seeks care
+            seek_care_uids = self.pars.prob_seek_care.filter(eligible)
+            self.seeking_care[seek_care_uids] = True
+        
+            return
+    
+        def offer_treatment(self):
+            """
+            Offer next treatment in cascade: NSAID → TXA → Pill → hIUD
+            Skip pill/hIUD if fertility_intent = True
+            """
+            # Eligible: seeking care, not currently on treatment
+            eligible = (self.seeking_care & ~self.on_treatment).uids
+        
+            if len(eligible) == 0:
+                return
+        
+            # Get fertility intent from FPsim
+            fertility_intent = self.sim.people.fp.fertility_intent
+        
+            for uid in eligible:
+                # Determine next treatment based on what's been tried
+                if not self.tried_nsaid[uid]:
+                    self._start_treatment(uid, 'nsaid')
             
-            elif not self.tried_txa[uid]:
-                self._start_treatment(uid, 'txa')
+                elif not self.tried_txa[uid]:
+                    self._start_treatment(uid, 'txa')
             
-            elif not self.tried_pill[uid] and not fertility_intent[uid]:
-                self._start_treatment(uid, 'pill')
+                elif not self.tried_pill[uid] and not fertility_intent[uid]:
+                    self._start_treatment(uid, 'pill')
             
-            elif not self.tried_hiud[uid] and not fertility_intent[uid]:
-                self._start_treatment(uid, 'hiud')
+                elif not self.tried_hiud[uid] and not fertility_intent[uid]:
+                    self._start_treatment(uid, 'hiud')
             
+                else:
+                    # Exhausted all options
+                    self.seeking_care[uid] = False
+        
+            return
+    
+        def _start_treatment(self, uid, treatment_type):
+            """
+            Start a specific treatment for an individual.
+            Updates both intervention states AND menstruation module states.
+            """
+            # Mark as tried
+            self[f'tried_{treatment_type}'][uid] = True
+        
+            # Set current treatment tracking
+            self.current_treatment[uid] = self.treatment_map[treatment_type]
+            self.on_treatment[uid] = True
+            self.treatment_start_ti[uid] = self.ti
+            self.treatment_duration[uid] = 0
+            self.treatment_assessed[uid] = False
+        
+            # Update menstruation module states (these affect HMB probability)
+            mens = self.sim.people.menstruation
+        
+            if treatment_type == 'nsaid':
+                mens.nsaid[uid] = True
+            
+            elif treatment_type == 'txa':
+                mens.txa[uid] = True
+            
+            elif treatment_type == 'pill':
+                # Set as contraceptive method
+                self.sim.people.fp.method[uid] = self.pill_idx
+                self.sim.people.fp.on_contra[uid] = True
+                self.sim.people.fp.ever_used_contra[uid] = True
+                # Set method duration
+                method_dur = self.sim.connectors.contraception.set_dur_method(np.array([uid]))
+                self.sim.people.fp.ti_contra[uid] = self.ti + method_dur[0]
+                # Menstruation module will detect pill usage in step_states()
+            
+            elif treatment_type == 'hiud':
+                # Set as contraceptive method
+                self.sim.people.fp.method[uid] = self.iud_idx
+                self.sim.people.fp.on_contra[uid] = True
+                self.sim.people.fp.ever_used_contra[uid] = True
+                mens.hiud_prone[uid] = True  # Mark as hormonal IUD user
+                # Set method duration
+                method_dur = self.sim.connectors.contraception.set_dur_method(np.array([uid]))
+                self.sim.people.fp.ti_contra[uid] = self.ti + method_dur[0]
+                # Menstruation module will detect hIUD usage in step_states()
+        
+            return
+    
+        def assess_treatment_effectiveness(self):
+            """
+            After time_to_assess, determine if treatment worked.
+            Following pathway: Does it work? → Yes/No
+            """
+            # Find those ready to assess
+            on_treatment_uids = (self.on_treatment & ~self.treatment_assessed).uids
+        
+            if len(on_treatment_uids) == 0:
+                return
+        
+            # Check if enough time has passed
+            time_on_treatment = self.ti - self.treatment_start_ti[on_treatment_uids]
+            ready_to_assess = on_treatment_uids[time_on_treatment >= self.pars.time_to_assess]
+        
+            if len(ready_to_assess) == 0:
+                return
+        
+            # Assess each person
+            for uid in ready_to_assess:
+                treatment = self.treatment_reverse_map[self.current_treatment[uid]]
+                effectiveness = self.pars.effectiveness[treatment]
+            
+                # Randomly determine if effective
+                if np.random.random() < effectiveness:
+                    self.treatment_effective[uid] = True
+                    # Treatment worked - HMB should be reduced
+                    # (menstruation module handles this via nsaid/txa/pill/hiud states)
+                else:
+                    self.treatment_effective[uid] = False
+                    # Treatment failed - stop and try next option
+                    self._stop_treatment(uid, success=False)
+            
+                self.treatment_assessed[uid] = True
+        
+            return
+    
+        def check_adherence(self):
+            """
+            For those with effective treatment, check adherence.
+            Following pathway: Does she adhere? → Yes/No
+            """
+            # Eligible: on treatment, treatment effective, not yet checked adherence
+            eligible = (
+                self.on_treatment &
+                self.treatment_effective &
+                ~self.adherent
+            ).uids
+        
+            if len(eligible) == 0:
+                return
+        
+            for uid in eligible:
+                treatment = self.treatment_reverse_map[self.current_treatment[uid]]
+                adherence_prob = self.pars.adherence[treatment]
+            
+                # Randomly determine adherence
+                if np.random.random() < adherence_prob:
+                    self.adherent[uid] = True
+                    # Continue treatment
+                else:
+                    self.adherent[uid] = False
+                    # Non-adherent - stop and try next option
+                    self._stop_treatment(uid, success=False)
+        
+            return
+    
+        def _stop_treatment(self, uid, success=False):
+            """
+            Stop current treatment.
+            Updates both intervention states AND menstruation module states.
+            """
+            treatment = self.treatment_reverse_map[self.current_treatment[uid]]
+            mens = self.sim.people.menstruation
+        
+            # Reset menstruation module treatment states
+            if treatment == 'nsaid':
+                mens.nsaid[uid] = False
+            
+            elif treatment == 'txa':
+                mens.txa[uid] = False
+            
+            elif treatment in ['pill', 'hiud']:
+                # Keep contraceptive method (they might continue for contraception)
+                # Or optionally reset:
+                # self.sim.people.fp.method[uid] = 0
+                # self.sim.people.fp.on_contra[uid] = False
+                pass
+        
+            # Reset tracking states
+            self.current_treatment[uid] = 0
+            self.on_treatment[uid] = False
+            self.treatment_duration[uid] = 0
+            self.treatment_effective[uid] = False
+            self.treatment_assessed[uid] = False
+        
+            if not success:
+               # Treatment failed/discontinued - can try next option
+               # seeking_care stays True
+               pass
             else:
-                # Exhausted all options
+                # Successfully completed treatment duration
                 self.seeking_care[uid] = False
-        
-        return
-    
-    def _start_treatment(self, uid, treatment_type):
-        """
-        Start a specific treatment for an individual.
-        Updates both intervention states AND menstruation module states.
-        """
-        # Mark as tried
-        self[f'tried_{treatment_type}'][uid] = True
-        
-        # Set current treatment tracking
-        self.current_treatment[uid] = treatment_type
-        self.on_treatment[uid] = True
-        self.treatment_start_ti[uid] = self.ti
-        self.treatment_duration[uid] = 0
-        self.treatment_assessed[uid] = False
-        
-        # Update menstruation module states (these affect HMB probability)
-        mens = self.sim.people.menstruation
-        
-        if treatment_type == 'nsaid':
-            mens.nsaid[uid] = True
-            
-        elif treatment_type == 'txa':
-            mens.txa[uid] = True
-            
-        elif treatment_type == 'pill':
-            # Set as contraceptive method
-            self.sim.people.fp.method[uid] = self.pill_idx
-            self.sim.people.fp.on_contra[uid] = True
-            self.sim.people.fp.ever_used_contra[uid] = True
-            # Set method duration
-            method_dur = self.sim.connectors.contraception.set_dur_method(np.array([uid]))
-            self.sim.people.fp.ti_contra[uid] = self.ti + method_dur[0]
-            # Menstruation module will detect pill usage in step_states()
-            
-        elif treatment_type == 'hiud':
-            # Set as contraceptive method
-            self.sim.people.fp.method[uid] = self.iud_idx
-            self.sim.people.fp.on_contra[uid] = True
-            self.sim.people.fp.ever_used_contra[uid] = True
-            mens.hiud_prone[uid] = True  # Mark as hormonal IUD user
-            # Set method duration
-            method_dur = self.sim.connectors.contraception.set_dur_method(np.array([uid]))
-            self.sim.people.fp.ti_contra[uid] = self.ti + method_dur[0]
-            # Menstruation module will detect hIUD usage in step_states()
-        
-        return
-    
-    def assess_treatment_effectiveness(self):
-        """
-        After time_to_assess, determine if treatment worked.
-        Following pathway: Does it work? → Yes/No
-        """
-        # Find those ready to assess
-        on_treatment_uids = (self.on_treatment & ~self.treatment_assessed).uids
-        
-        if len(on_treatment_uids) == 0:
-            return
-        
-        # Check if enough time has passed
-        time_on_treatment = self.ti - self.treatment_start_ti[on_treatment_uids]
-        ready_to_assess = on_treatment_uids[time_on_treatment >= self.pars.time_to_assess]
-        
-        if len(ready_to_assess) == 0:
-            return
-        
-        # Assess each person
-        for uid in ready_to_assess:
-            treatment = self.current_treatment[uid]
-            effectiveness = self.pars.effectiveness[treatment]
-            
-            # Randomly determine if effective
-            if np.random.random() < effectiveness:
-                self.treatment_effective[uid] = True
-                # Treatment worked - HMB should be reduced
-                # (menstruation module handles this via nsaid/txa/pill/hiud states)
-            else:
-                self.treatment_effective[uid] = False
-                # Treatment failed - stop and try next option
-                self._stop_treatment(uid, success=False)
-            
-            self.treatment_assessed[uid] = True
-        
-        return
-    
-    def check_adherence(self):
-        """
-        For those with effective treatment, check adherence.
-        Following pathway: Does she adhere? → Yes/No
-        """
-        # Eligible: on treatment, treatment effective, not yet checked adherence
-        eligible = (
-            self.on_treatment &
-            self.treatment_effective &
-            ~self.adherent
-        ).uids
-        
-        if len(eligible) == 0:
-            return
-        
-        for uid in eligible:
-            treatment = self.current_treatment[uid]
-            adherence_prob = self.pars.adherence[treatment]
-            
-            # Randomly determine adherence
-            if np.random.random() < adherence_prob:
-                self.adherent[uid] = True
-                # Continue treatment
-            else:
                 self.adherent[uid] = False
-                # Non-adherent - stop and try next option
-                self._stop_treatment(uid, success=False)
         
-        return
-    
-    def _stop_treatment(self, uid, success=False):
-        """
-        Stop current treatment.
-        Updates both intervention states AND menstruation module states.
-        """
-        treatment = self.current_treatment[uid]
-        mens = self.sim.people.menstruation
-        
-        # Reset menstruation module treatment states
-        if treatment == 'nsaid':
-            mens.nsaid[uid] = False
-            
-        elif treatment == 'txa':
-            mens.txa[uid] = False
-            
-        elif treatment in ['pill', 'hiud']:
-            # Keep contraceptive method (they might continue for contraception)
-            # Or optionally reset:
-            # self.sim.people.fp.method[uid] = 0
-            # self.sim.people.fp.on_contra[uid] = False
-            pass
-        
-        # Reset tracking states
-        self.current_treatment[uid] = 'none'
-        self.on_treatment[uid] = False
-        self.treatment_duration[uid] = 0
-        self.treatment_effective[uid] = False
-        self.treatment_assessed[uid] = False
-        
-        if not success:
-            # Treatment failed/discontinued - can try next option
-            # seeking_care stays True
-            pass
-        else:
-            # Successfully completed treatment duration
-            self.seeking_care[uid] = False
-            self.adherent[uid] = False
-        
-        return
-    
-    def update_treatment_duration(self):
-        """
-        Increment duration for those on treatment.
-        Check if treatment duration is complete.
-        """
-        on_treatment_uids = self.on_treatment.uids
-        
-        if len(on_treatment_uids) == 0:
             return
-        
-        # Increment duration (convert to months)
-        self.treatment_duration[on_treatment_uids] += self.sim.t.dt_year * 12
-        
-        # Check if anyone completed their duration
-        for uid in on_treatment_uids:
-            if not self.adherent[uid]:
-                continue
-            
-            treatment = self.current_treatment[uid]
-            max_duration = self.pars.treatment_duration_months[treatment]
-            
-            if self.treatment_duration[uid] >= max_duration:
-                # Completed successfully
-                self._stop_treatment(uid, success=True)
-        
-        return
     
-    def update_results(self):
-        """Track cascade metrics"""
-        super().update_results()
-        ti = self.ti
+        def update_treatment_duration(self):
+            """
+            Increment duration for those on treatment.
+            Check if treatment duration is complete.
+            """
+            on_treatment_uids = self.on_treatment.uids
         
-        # Get menstruating women
-        mens = self.sim.people.menstruation.menstruating
-        hmb_cases = self.sim.people.menstruation.hmb & mens
+            if len(on_treatment_uids) == 0:
+                return
         
-        # Care-seeking
-        if np.count_nonzero(hmb_cases) > 0:
-            self.results.seeking_care_prev[ti] = np.count_nonzero(self.seeking_care & hmb_cases) / np.count_nonzero(hmb_cases)
-        else:
-            self.results.seeking_care_prev[ti] = 0
+            # Increment duration (convert to months)
+            self.treatment_duration[on_treatment_uids] += self.sim.t.dt_year * 12
         
-        # Treatment prevalence
-        if np.count_nonzero(mens) > 0:
-            self.results.on_nsaid_prev[ti] = np.count_nonzero((self.current_treatment == 'nsaid') & mens) / np.count_nonzero(mens)
-            self.results.on_txa_prev[ti] = np.count_nonzero((self.current_treatment == 'txa') & mens) / np.count_nonzero(mens)
-            self.results.on_pill_hmb_prev[ti] = np.count_nonzero((self.current_treatment == 'pill') & mens) / np.count_nonzero(mens)
-            self.results.on_hiud_hmb_prev[ti] = np.count_nonzero((self.current_treatment == 'hiud') & mens) / np.count_nonzero(mens)
-            self.results.on_any_treatment_prev[ti] = np.count_nonzero(self.on_treatment & mens) / np.count_nonzero(mens)
-        else:
-            self.results.on_nsaid_prev[ti] = 0
-            self.results.on_txa_prev[ti] = 0
-            self.results.on_pill_hmb_prev[ti] = 0
-            self.results.on_hiud_hmb_prev[ti] = 0
-            self.results.on_any_treatment_prev[ti] = 0
+            # Check if anyone completed their duration
+            for uid in on_treatment_uids:
+               if not self.adherent[uid]:
+                   continue
+            
+               treatment = self.treatment_reverse_map[self.current_treatment[uid]]
+               max_duration = self.pars.treatment_duration_months[treatment]
+            
+               if self.treatment_duration[uid] >= max_duration:
+                    # Completed successfully
+                    self._stop_treatment(uid, success=True)
         
-        # Success metrics
-        assessed = self.treatment_assessed & mens
-        if np.count_nonzero(assessed) > 0:
-            self.results.treatment_success_rate[ti] = np.count_nonzero(self.treatment_effective & assessed) / np.count_nonzero(assessed)
-        else:
-            self.results.treatment_success_rate[ti] = 0
+            return
+    
+        def update_results(self):
+            """Track cascade metrics"""
+            super().update_results()
+            ti = self.ti
         
-        effective_treatment = self.treatment_effective & mens
-        if np.count_nonzero(effective_treatment) > 0:
-            self.results.adherence_rate[ti] = np.count_nonzero(self.adherent & effective_treatment) / np.count_nonzero(effective_treatment)
-        else:
-            self.results.adherence_rate[ti] = 0
+            # Get menstruating women
+            mens = self.sim.people.menstruation.menstruating
+            hmb_cases = self.sim.people.menstruation.hmb & mens
         
-        # Cascade progression
-        if np.count_nonzero(hmb_cases) > 0:
-            self.results.cascade_step_0[ti] = np.count_nonzero(~self.tried_nsaid & hmb_cases) / np.count_nonzero(hmb_cases)
-            self.results.cascade_step_1[ti] = np.count_nonzero(self.tried_nsaid & hmb_cases) / np.count_nonzero(hmb_cases)
-            self.results.cascade_step_2[ti] = np.count_nonzero(self.tried_txa & hmb_cases) / np.count_nonzero(hmb_cases)
-            self.results.cascade_step_3[ti] = np.count_nonzero(self.tried_pill & hmb_cases) / np.count_nonzero(hmb_cases)
-            self.results.cascade_step_4[ti] = np.count_nonzero(self.tried_hiud & hmb_cases) / np.count_nonzero(hmb_cases)
-        else:
-            self.results.cascade_step_0[ti] = 0
-            self.results.cascade_step_1[ti] = 0
-            self.results.cascade_step_2[ti] = 0
-            self.results.cascade_step_3[ti] = 0
-            self.results.cascade_step_4[ti] = 0
+            # Care-seeking
+            if np.count_nonzero(hmb_cases) > 0:
+                self.results.seeking_care_prev[ti] = np.count_nonzero(self.seeking_care & hmb_cases) / np.count_nonzero(hmb_cases)
+            else:
+                self.results.seeking_care_prev[ti] = 0
         
-        return
+            # Treatment prevalence
+            if np.count_nonzero(mens) > 0:
+                self.results.on_nsaid_prev[ti] = np.count_nonzero((self.current_treatment == 1) & mens) / np.count_nonzero(mens)
+                self.results.on_txa_prev[ti] = np.count_nonzero((self.current_treatment == 2) & mens) / np.count_nonzero(mens)
+                self.results.on_pill_hmb_prev[ti] = np.count_nonzero((self.current_treatment == 3) & mens) / np.count_nonzero(mens)
+                self.results.on_hiud_hmb_prev[ti] = np.count_nonzero((self.current_treatment == 4) & mens) / np.count_nonzero(mens)
+                self.results.on_any_treatment_prev[ti] = np.count_nonzero(self.on_treatment & mens) / np.count_nonzero(mens)
+            else:
+                self.results.on_nsaid_prev[ti] = 0
+                self.results.on_txa_prev[ti] = 0
+                self.results.on_pill_hmb_prev[ti] = 0
+                self.results.on_hiud_hmb_prev[ti] = 0
+                self.results.on_any_treatment_prev[ti] = 0
+        
+            # Success metrics
+            assessed = self.treatment_assessed & mens
+            if np.count_nonzero(assessed) > 0:
+                self.results.treatment_success_rate[ti] = np.count_nonzero(self.treatment_effective & assessed) / np.count_nonzero(assessed)
+            else:
+                self.results.treatment_success_rate[ti] = 0
+        
+            effective_treatment = self.treatment_effective & mens
+            if np.count_nonzero(effective_treatment) > 0:
+                self.results.adherence_rate[ti] = np.count_nonzero(self.adherent & effective_treatment) / np.count_nonzero(effective_treatment)
+            else:
+                self.results.adherence_rate[ti] = 0
+        
+            # Cascade progression
+            if np.count_nonzero(hmb_cases) > 0:
+                self.results.cascade_step_0[ti] = np.count_nonzero(~self.tried_nsaid & hmb_cases) / np.count_nonzero(hmb_cases)
+                self.results.cascade_step_1[ti] = np.count_nonzero(self.tried_nsaid & hmb_cases) / np.count_nonzero(hmb_cases)
+                self.results.cascade_step_2[ti] = np.count_nonzero(self.tried_txa & hmb_cases) / np.count_nonzero(hmb_cases)
+                self.results.cascade_step_3[ti] = np.count_nonzero(self.tried_pill & hmb_cases) / np.count_nonzero(hmb_cases)
+                self.results.cascade_step_4[ti] = np.count_nonzero(self.tried_hiud & hmb_cases) / np.count_nonzero(hmb_cases)
+            else:
+                self.results.cascade_step_0[ti] = 0
+                self.results.cascade_step_1[ti] = 0
+                self.results.cascade_step_2[ti] = 0
+                self.results.cascade_step_3[ti] = 0
+                self.results.cascade_step_4[ti] = 0
+        
+            return
 
                 
             
