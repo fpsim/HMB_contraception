@@ -155,6 +155,7 @@ class Menstruation(ss.Connector):
             ss.BoolState('txa', label="Using tranexamic acid"),
             ss.BoolState('nsaid', label="Using NSAIDs"),
             ss.BoolState('hiud_prone', label="Prone to use hormonal IUD, if using IUD"),
+            
 
         )
 
