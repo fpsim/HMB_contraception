@@ -48,7 +48,6 @@ class hiud_hmb(ss.Intervention):
             ss.BoolState('intervention_applied', label="Received hIUD through intervention"),
             ss.BoolState('hiud_offered', label="Was offered hIUD"),
             ss.BoolState('hiud_accepted', label="Accepted hIUD"),
-            ss.BoolState('did_not_seek_care', default=False),  # Track "Seeking care?" -> No
         )
         return
     
@@ -434,6 +433,7 @@ class HMBCarePathway(ss.Intervention):
                 ss.BoolState('tried_txa', default=False),
                 ss.BoolState('tried_pill', default=False),
                 ss.BoolState('tried_hiud', default=False),
+                ss.BoolState('did_not_seek_care', default=False),  # Track "Seeking care?" -> No
             
                 # Current treatment status
                 ss.FloatArr('current_treatment', default=0), # 0=none, 1=nsaid, 2=txa, 3=pill, 4=hiud
