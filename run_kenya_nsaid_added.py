@@ -27,7 +27,7 @@ from fpsim import plotting as plt
 from menstruation import Menstruation
 from education import Education
 from interventions import hiud_hmb, txa, pill_hmb, hmb_package, nsaid
-from interventions import HMBCarePathway
+#from interventions import HMBCarePathway
 
 
 # --- convert monthly time series to yearly ---
@@ -72,16 +72,16 @@ plt.Config.show_rmse = False
 
 
 # Create the pathway intervention
-pathway = HMBCarePathway(
-    year=2026,
-    prob_seek_care=ss.bernoulli(p=0.4),
-    effectiveness=sc.objdict(
-        nsaid=0.5,
-        txa=0.7,
-        pill=0.8,
-        hiud=0.9
-    ),
-)
+#pathway = HMBCarePathway(
+#    year=2026,
+#    prob_seek_care=ss.bernoulli(p=0.4),
+#    effectiveness=sc.objdict(
+#        nsaid=0.5,
+#        txa=0.7,
+#        pill=0.8,
+#        hiud=0.9
+#    ),
+#)
 
 
 def make_pars():
@@ -136,7 +136,6 @@ def make_sim(pars=None, stop=2021):
         education_module=edu,
         connectors=[mens],
         verbose=0.1,
-        interventions=[pathway],
     )
 
     return sim
@@ -226,11 +225,11 @@ def plot_stochastic_results(stats, years_annual, years_monthly, si_annual, si_mo
     if label_map is None:
         label_map = {
             'baseline': 'Baseline',
-            'hiud25': 'hIUD 25% coverage',
-            'hiud50': 'hIUD 50% coverage',
+            'hiud2': 'hIUD 2% coverage',
+            'hiud5': 'hIUD 5% coverage',
+            'hiud8': 'hIUD 8% coverage',
             'p25': 'Package 25% coverage',
             'p50': 'Package 50% coverage',
-            'p75': 'Package 75% coverage'
         }
     
     set_font(10)
@@ -562,11 +561,11 @@ if __name__ == '__main__':
         n_seeds = 2
         
         colors = {
-            'hiud25':  '#372248',    # dark purple
-            'hiud50':  '#3C427C',    # blue-ish purple
+            'hiud2':  '#372248',    # dark purple
+            'hiud5':  '#3C427C',    # blue-ish purple
+            'hiud8':  '#4E57A6',    # 
             'p25': '#ffa500',        # orange
             'p50': '#ff8c00',        # darker orange
-            'p75': '#ff6500',        # darkest orange
             'baseline': '#6c757d'   # dark gray
         }
                 
@@ -577,16 +576,21 @@ if __name__ == '__main__':
                 s_base = make_sim(stop=2032)
                 s_base['pars']['rand_seed'] = seed
                 
-                # only hIUD - 25% coverage
-                s_hiud25 = make_sim(stop=2032)
-                s_hiud25['pars']['interventions'] = [hiud_hmb(prob_offer=0.25, prob_accept=0.5)]
-                s_hiud25['pars']['rand_seed'] = seed
+                # only hIUD - 2% coverage
+                s_hiud2 = make_sim(stop=2032)
+                s_hiud2['pars']['interventions'] = [hiud_hmb(prob_offer=0.02, prob_accept=0.5)]
+                s_hiud2['pars']['rand_seed'] = seed
                 
-                # only hIUD - 50% coverage
-                s_hiud50 = make_sim(stop=2032)
-                s_hiud50['pars']['interventions'] = [hiud_hmb(prob_offer=0.5, prob_accept=0.5)]
-                s_hiud50['pars']['rand_seed'] = seed
+                # only hIUD - 5% coverage
+                s_hiud5 = make_sim(stop=2032)
+                s_hiud5['pars']['interventions'] = [hiud_hmb(prob_offer=0.05, prob_accept=0.5)]
+                s_hiud5['pars']['rand_seed'] = seed
                 
+                # only hIUD - 8% coverage
+                s_hiud8 = make_sim(stop=2032)
+                s_hiud8['pars']['interventions'] = [hiud_hmb(prob_offer=0.08, prob_accept=0.5)]
+                s_hiud8['pars']['rand_seed'] = seed
+            
                 # # only NSAID - 20% coverage
                 # s_nsaid20 = make_sim(stop=2032)
                 # s_nsaid20['pars']['interventions'] = [nsaid(prob_offer=0.2, prob_accept=0.5)]
@@ -608,7 +612,7 @@ if __name__ == '__main__':
                                                  prob_accept_nsaid=0.5,
                                                  prob_accept_txa=0.5, 
                                                  prob_accept_pill=0.5,
-                                                 prob_accept_hiud=0.5)]
+                                                 prob_accept_hiud=0.05)]
                 s_p25['pars']['rand_seed'] = seed
     
                 # full package - 50 % of eligible pop
@@ -617,42 +621,43 @@ if __name__ == '__main__':
                                                  prob_accept_nsaid=0.5,
                                                  prob_accept_txa=0.5, 
                                                  prob_accept_pill=0.5,
-                                                 prob_accept_hiud=0.5)]
+                                                 prob_accept_hiud=0.05)]
                 s_p50['pars']['rand_seed'] = seed
                 
                 # full package - 60 % of eligible pop
-                s_p75 = make_sim(stop=2032)
-                s_p75['pars']['interventions'] = [hmb_package(prob_offer=0.75, 
-                                                 prob_accept_nsaid=0.5,
-                                                 prob_accept_txa=0.5, 
-                                                 prob_accept_pill=0.5,
-                                                 prob_accept_hiud=0.5)]
-                s_p75['pars']['rand_seed'] = seed
+                #s_p75 = make_sim(stop=2032)
+                #s_p75['pars']['interventions'] = [hmb_package(prob_offer=0.75, 
+                #                                 prob_accept_nsaid=0.5,
+                #                                 prob_accept_txa=0.5, 
+                #                                 prob_accept_pill=0.5,
+                #                                 prob_accept_hiud=0.5)]
+                #s_p75['pars']['rand_seed'] = seed
                 
                 
                 # --- run the simulations
-                m = ss.parallel([s_base, s_hiud25, s_hiud50, s_p25, s_p50, s_p75], 
+                m = ss.parallel([s_base, s_hiud2, s_hiud5, s_hiud8, s_p25, s_p50], 
                                 parallel=True)
                 # replace sims with run versions
-                s_base, s_hiud25, s_hiud50, s_p25, s_p50, s_p75 = m.sims[:]  
+                s_base, s_hiud2, s_hiud5, s_hiud8, s_p25, s_p50, s_p75 = m.sims[:]  
                 
                 # --- save results
                 sc.saveobj(outfolder_stochastic+f'kenya_package_base_seed{seed}.sim', s_base)
-                sc.saveobj(outfolder_stochastic+f'kenya_package_hiud-25_seed{seed}.sim', s_hiud25)
-                sc.saveobj(outfolder_stochastic+f'kenya_package_hiud-50_seed{seed}.sim', s_hiud50)
-                # sc.saveobj(outfolder_stochastic+f'kenya_package_txa-20_seed{seed}.sim', s_txa20)
+                sc.saveobj(outfolder_stochastic+f'kenya_package_hiud-2_seed{seed}.sim', s_hiud2)
+                sc.saveobj(outfolder_stochastic+f'kenya_package_hiud-5_seed{seed}.sim', s_hiud5)
+                sc.saveobj(outfolder_stochastic+f'kenya_package_hiud-8_seed{seed}.sim', s_hiud8)
+               # sc.saveobj(outfolder_stochastic+f'kenya_package_txa-20_seed{seed}.sim', s_txa20)
                 # sc.saveobj(outfolder_stochastic+f'kenya_package_pill-20_seed{seed}.sim', s_pill20)
                 # sc.saveobj(outfolder_stochastic+f'kenya_package_nsaid-20_seed{seed}.sim', s_nsaid20)
                 sc.saveobj(outfolder_stochastic+f'kenya_package_package25_seed{seed}.sim', s_p25)
                 sc.saveobj(outfolder_stochastic+f'kenya_package_package50_seed{seed}.sim', s_p50)
-                sc.saveobj(outfolder_stochastic+f'kenya_package_package75_seed{seed}.sim', s_p75)
+                #sc.saveobj(outfolder_stochastic+f'kenya_package_package75_seed{seed}.sim', s_p75)
     
     
         
     # --- aggregate results
         
     # Initialize dictionaries to store results for each scenario
-    scenarios = ['baseline', 'hiud25', 'hiud50',  'p25', 'p50', 'p75']
+    scenarios = ['baseline', 'hiud2', 'hiud5','hiud8',  'p25', 'p50']
     res_to_plot = ['hiud','pill', 'hmb', 'poor_mh', 'anemic','n_anemia', 'pain', 'prop_disrupted','n_disruptions']
     labels = ['hIUD Usage','pill Usage', 'HMB ', 'Poor MH', 'Anemic','Number of anemia cases averted', 'Pain', 'Schooling Disruptions','Schooling Disruptions Averted']    
         
@@ -662,17 +667,18 @@ if __name__ == '__main__':
     # load individual files
     for seed in range(n_seeds):
             s_base = sc.loadobj(outfolder_stochastic+f'kenya_package_base_seed{seed}.sim')
-            s_hiud25 = sc.loadobj(outfolder_stochastic+f'kenya_package_hiud-25_seed{seed}.sim')
-            s_hiud50 = sc.loadobj(outfolder_stochastic+f'kenya_package_hiud-50_seed{seed}.sim')
+            s_hiud2 = sc.loadobj(outfolder_stochastic+f'kenya_package_hiud-2_seed{seed}.sim')
+            s_hiud5 = sc.loadobj(outfolder_stochastic+f'kenya_package_hiud-5_seed{seed}.sim')
+            s_hiud8 = sc.loadobj(outfolder_stochastic+f'kenya_package_hiud-8_seed{seed}.sim')
             # s_txa20 = sc.loadobj(outfolder_stochastic+f'kenya_package_txa-20_seed{seed}.sim')
             # s_pill20 = sc.loadobj(outfolder_stochastic+f'kenya_package_pill-20_seed{seed}.sim')
             # s_nsaid20 = sc.loadobj(outfolder_stochastic+f'kenya_package_nsaid-20_seed{seed}.sim')
             s_p25 = sc.loadobj(outfolder_stochastic+f'kenya_package_package25_seed{seed}.sim')
             s_p50 = sc.loadobj(outfolder_stochastic+f'kenya_package_package50_seed{seed}.sim')
-            s_p75 = sc.loadobj(outfolder_stochastic+f'kenya_package_package75_seed{seed}.sim')
+            #s_p75 = sc.loadobj(outfolder_stochastic+f'kenya_package_package75_seed{seed}.sim')
             
-            sims = {'baseline': s_base, 'hiud25': s_hiud25, 'hiud50': s_hiud50, 
-                    'p25': s_p25, 'p50': s_p50, 'p75': s_p75}
+            sims = {'baseline': s_base, 'hiud2': s_hiud2, 'hiud5': s_hiud5, 
+                    'hiud8': s_hiud8, 'p25': s_p25, 'p50': s_p50}
             
             for scenario, sim in sims.items():
                 for res in res_to_plot:
@@ -776,8 +782,8 @@ if __name__ == '__main__':
             si_monthly=si_monthly, colors=colors,
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
-            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'n_anemia','pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic','Anemia',  'Pain', 'Disruption','Disruption'],  
+            res_to_plot=[ 'hmb', 'n_anemia','n_disruptions'],  
+            labels=[ 'HMB', 'Anemia', 'Disruption'],  
             filename='hmb_scenario-package_stochastic_results.png'
         )
         
