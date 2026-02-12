@@ -412,6 +412,20 @@ class HMBCarePathway(ss.Intervention):
                     pill=24,
                     hiud=60,  # 5 years
                 ),
+                
+                # Offer + accept at each treatment node
+                prob_offer=sc.objdict(
+                    nsaid=ss.bernoulli(p=0.9),
+                    txa=ss.bernoulli(p=0.9),
+                    pill=ss.bernoulli(p=0.9),
+                    hiud=ss.bernoulli(p=0.9),
+                ),
+                prob_accept=sc.objdict(
+                    nsaid=ss.bernoulli(p=0.7),
+                    txa=ss.bernoulli(p=0.6),
+                    pill=ss.bernoulli(p=0.5),
+                    hiud=ss.bernoulli(p=0.5),
+                ), 
             )
         
             self.update_pars(pars, **kwargs)
@@ -445,6 +459,18 @@ class HMBCarePathway(ss.Intervention):
                 ss.BoolState('treatment_effective', default=False),
                 ss.BoolState('treatment_assessed', default=False),
                 ss.BoolState('adherent', default=False),
+                
+                ss.BoolState('nsaid_offered', default=False),
+                ss.BoolState('nsaid_accepted', default=False),
+
+                ss.BoolState('txa_offered', default=False),
+                ss.BoolState('txa_accepted', default=False),
+
+                ss.BoolState('pill_offered', default=False),
+                ss.BoolState('pill_accepted', default=False),
+
+                ss.BoolState('hiud_offered', default=False),
+                ss.BoolState('hiud_accepted', default=False),
             )
         
             return
@@ -549,25 +575,60 @@ class HMBCarePathway(ss.Intervention):
             fertility_intent = self.sim.people.fp.fertility_intent
         
             for uid in eligible:
-                # Determine next treatment based on what's been tried
+                # NSAID node
                 if not self.tried_nsaid[uid]:
-                    self._start_treatment(uid, 'nsaid')
-            
-                elif not self.tried_txa[uid]:
-                    self._start_treatment(uid, 'txa')
-            
-                elif not self.tried_pill[uid] and not fertility_intent[uid]:
-                    self._start_treatment(uid, 'pill')
-            
-                elif not self.tried_hiud[uid] and not fertility_intent[uid]:
-                    self._start_treatment(uid, 'hiud')
-            
-                else:
-                    # Exhausted all options
-                    self.seeking_care[uid] = False
-        
+                    started = self._offer_and_start(uid, 'nsaid')
+                    if started:
+                        continue  # they are now on treatment
+
+                # TXA node
+                if not self.tried_txa[uid]:
+                    started = self._offer_and_start(uid, 'txa')
+                    if started:
+                        continue
+
+                # Pill node (only if no fertility intent)
+                if (not fertility_intent[uid]) and (not self.tried_pill[uid]):
+                    started = self._offer_and_start(uid, 'pill')
+                    if started:
+                        continue
+
+                # hIUD node (only if no fertility intent)
+                if (not fertility_intent[uid]) and (not self.tried_hiud[uid]):
+                    started = self._offer_and_start(uid, 'hiud')
+                    if started:
+                        continue
+
+                # Exhausted or blocked → exit care pathway this timestep
+                self.seeking_care[uid] = False
             return
     
+    
+        def _offer_and_start(self, uid, treatment_type):
+            """
+            Offer and accept logic for a treatment node.
+            Returns True if treatment started, False otherwise.
+            """
+            # offer
+            offered = self.pars.prob_offer[treatment_type].filter(np.array([uid]))
+            if len(offered):
+                getattr(self, f"{treatment_type}_offered")[uid] = True
+            else:
+                # Not offered counts as "tried/considered" for cascade progression
+                getattr(self, f"tried_{treatment_type}")[uid] = True
+                return False
+            
+            accepted = self.pars.prob_accept[treatment_type].filter(np.array([uid]))
+            if len(accepted):
+                getattr(self, f"{treatment_type}_accepted")[uid] = True
+                self._start_treatment(uid, treatment_type)  # this sets tried_*, on_treatment, and module flags
+                return True
+            else:
+                # Declined counts as "tried/considered" so you can advance next timestep
+                getattr(self, f"tried_{treatment_type}")[uid] = True
+                return False
+
+
         def _start_treatment(self, uid, treatment_type):
             """
             Start a specific treatment for an individual.
@@ -575,7 +636,7 @@ class HMBCarePathway(ss.Intervention):
             """
             # Mark as tried
             getattr(self, f"tried_{treatment_type}")[uid] = True
-        
+            
             # Set current treatment tracking
             self.current_treatment[uid] = self.treatment_map[treatment_type]
             self.on_treatment[uid] = True
