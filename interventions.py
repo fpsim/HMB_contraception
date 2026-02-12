@@ -48,6 +48,7 @@ class hiud_hmb(ss.Intervention):
             ss.BoolState('intervention_applied', label="Received hIUD through intervention"),
             ss.BoolState('hiud_offered', label="Was offered hIUD"),
             ss.BoolState('hiud_accepted', label="Accepted hIUD"),
+            ss.BoolState('did_not_seek_care', default=False),  # Track "Seeking care?" -> No
         )
         return
     
@@ -465,6 +466,7 @@ class HMBCarePathway(ss.Intervention):
                 ss.Result('cascade_step_2', scale=False, label="Tried TXA"),
                 ss.Result('cascade_step_3', scale=False, label="Tried Pill"),
                 ss.Result('cascade_step_4', scale=False, label="Tried hIUD"),
+                ss.Result('no_care_prev', scale=False, label="Proportion with HMB not seeking care"),
             ]
             self.define_results(*results)
             return
@@ -518,10 +520,17 @@ class HMBCarePathway(ss.Intervention):
         
             if len(eligible) == 0:
                 return
-        
+            
+            # Reset the "no care" marker for these eligible this timestep
+            self.did_not_seek_care[eligible] = False
+    
             # Randomly select who seeks care
             seek_care_uids = self.pars.prob_seek_care.filter(eligible)
             self.seeking_care[seek_care_uids] = True
+            
+            # Everyone else does NOT seek care this timestep → no effective treatment; no change to HMB status
+            no_care_uids = np.setdiff1d(eligible, seek_care_uids)
+            self.did_not_seek_care[no_care_uids] = True
         
             return
     
@@ -565,7 +574,7 @@ class HMBCarePathway(ss.Intervention):
             Updates both intervention states AND menstruation module states.
             """
             # Mark as tried
-            self[f'tried_{treatment_type}'][uid] = True
+            getattr(self, f"tried_{treatment_type}")[uid] = True
         
             # Set current treatment tracking
             self.current_treatment[uid] = self.treatment_map[treatment_type]
@@ -631,17 +640,17 @@ class HMBCarePathway(ss.Intervention):
             for uid in ready_to_assess:
                 has_hmb = self.sim.people.menstruation.hmb[uid]
             
-            if not has_hmb:
-                # HMB resolved - 
-                self.treatment_effective[uid] = True
-                # Person continues to adherence check
-            else:
-                # HMB still present - treatment not effective for this person
+                if not has_hmb:
+                    # HMB resolved - 
+                    self.treatment_effective[uid] = True
+                    # Person continues to adherence check
+                else:
+                    # HMB still present - treatment not effective for this person
                     self.treatment_effective[uid] = False
                     # Stop treatment and try next option in cascade
                     self._stop_treatment(uid, success=False)
         
-            self.treatment_assessed[uid] = True
+                self.treatment_assessed[uid] = True
     
             return
     
@@ -756,6 +765,12 @@ class HMBCarePathway(ss.Intervention):
                 self.results.seeking_care_prev[ti] = np.count_nonzero(self.seeking_care & hmb_cases) / np.count_nonzero(hmb_cases)
             else:
                 self.results.seeking_care_prev[ti] = 0
+                
+            # No-care prevalence among HMB cases (diagram branch: Seeking care? -> No)
+            if np.count_nonzero(hmb_cases) > 0:
+                self.results.no_care_prev[ti] = np.count_nonzero(self.did_not_seek_care & hmb_cases) / np.count_nonzero(hmb_cases)
+            else:
+                self.results.no_care_prev[ti] = 0 
         
             # Treatment prevalence
             if np.count_nonzero(mens) > 0:
