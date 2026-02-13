@@ -266,6 +266,14 @@ class hmb_package(ss.Intervention):
         self.define_pars(
             year=2026,
             prob_offer=ss.bernoulli(p=0.2),  # 20% offered the package
+            
+            prob_offer=sc.objdict(
+                nsaid=ss.bernoulli(p=0.2),
+                txa=ss.bernoulli(p=0.2),
+                pill=ss.bernoulli(p=0.2),
+                hiud=ss.bernoulli(p=0.2),
+            ),
+            
             prob_accept_nsaid=ss.bernoulli(p=0.5), # 50% accept NSAID
             prob_accept_txa=ss.bernoulli(p=0.5),  # 50% accept TXA
             prob_accept_pill=ss.bernoulli(p=0.5),  # 50% accept pill
@@ -309,29 +317,31 @@ class hmb_package(ss.Intervention):
             elig_uids = self.check_eligibility()
             
             # Step 2: Select 20% to offer the package
-            package_offered_uids = self.pars.prob_offer.filter(elig_uids)
+            package_offered_uids = self.pars.prob_offer_package.filter(elig_uids)
             self.package_offered[package_offered_uids] = True
             
             # Step 3: Offer the four interventions in the package in order: NSAID → TXA → Pill → hIUD
 
             # 3.1 NSAID 
-            self.nsaid_offered[package_offered_uids] = True
-            nsaid_accept_uids = self.pars.prob_accept_nsaid.filter(package_offered_uids)
+            nsaid_offered_uids = self.pars.prob_offer.nsaid.filter(package_offered_uids)
+            self.nsaid_offered[nsaid_offered_uids] = True
+            nsaid_accept_uids = self.pars.prob_accept_nsaid.filter(nsaid_offered_uids)
             self.nsaid_accepted[nsaid_accept_uids] = True
             sim.people.menstruation.nsaid[nsaid_accept_uids] = True
             
             # 3.2 TXA
             nsaid_declined_uids = np.setdiff1d(package_offered_uids, nsaid_accept_uids)
-            self.txa_offered[nsaid_declined_uids] = True
-            txa_accept_uids = self.pars.prob_accept_txa.filter(nsaid_declined_uids)
+            txa_offered_uids = self.pars.prob_offer.txa.filter(nsaid_declined_uids)
+            self.txa_offered[txa_offered_uids] = True
+            txa_accept_uids = self.pars.prob_accept_txa.filter(txa_offered_uids)
             self.txa_accepted[txa_accept_uids] = True
             sim.people.menstruation.txa[txa_accept_uids] = True
-
             
             # 3.3 pill
             txa_declined_uids = np.setdiff1d(nsaid_declined_uids, txa_accept_uids)
-            self.pill_offered[txa_declined_uids] = True
-            pill_accept_uids = self.pars.prob_accept_pill.filter(txa_declined_uids)
+            pill_offered_uids = self.pars.prob_offer.pill.filter(txa_declined_uids)
+            self.pill_offered[pill_offered_uids] = True
+            pill_accept_uids = self.pars.prob_accept_pill.filter(pill_offered_uids)
             self.pill_accepted[pill_accept_uids] = True
             # apply contraception
             sim.people.fp.method[pill_accept_uids] = self.pill_idx
@@ -340,11 +350,13 @@ class hmb_package(ss.Intervention):
             method_dur = sim.connectors.contraception.set_dur_method(pill_accept_uids)
             sim.people.fp.ti_contra[pill_accept_uids] = self.ti + method_dur
             
-            # 3.4 hIUD
+            # 3.4 hIUD (only offer to those who declined/weren't offered pill)
             pill_declined_uids = np.setdiff1d(txa_declined_uids, pill_accept_uids)
-            self.hiud_offered[pill_declined_uids] = True
-            hiud_accept_uids = self.pars.prob_accept_hiud.filter(pill_declined_uids)
+            hiud_offered_uids = self.pars.prob_offer.hiud.filter(pill_declined_uids)
+            self.hiud_offered[hiud_offered_uids] = True
+            hiud_accept_uids = self.pars.prob_accept_hiud.filter(hiud_offered_uids)
             self.hiud_accepted[hiud_accept_uids] = True
+            
             # apply contraception
             sim.people.fp.method[hiud_accept_uids] = self.iud_idx
             sim.people.fp.on_contra[hiud_accept_uids] = True
@@ -375,8 +387,6 @@ class HMBCarePathway(ss.Intervention):
             - Treatment effectiveness
             - Adherence
             - Fertility intent 
-            - Postpartum status 
-
             """
         # Treatment encoding mapping
         treatment_map = {
@@ -575,8 +585,6 @@ class HMBCarePathway(ss.Intervention):
         
             # Get fertility intent from FPsim
             fertility_intent = self.sim.people.fp.fertility_intent
-            postpartum = self.sim.people.fp.postpartum
-
         
             for uid in eligible:
                 # NSAID node
@@ -591,14 +599,14 @@ class HMBCarePathway(ss.Intervention):
                     if started:
                         continue
 
-                # Pill node (only if no fertility intent AND not postpartum)
-                if (not fertility_intent[uid]) and (not postpartum[uid]) and (not self.tried_pill[uid]):
+                # Pill node (only if no fertility intent)
+                if (not fertility_intent[uid]) and (not self.tried_pill[uid]):
                     started = self._offer_and_start(uid, 'pill')
                     if started:
                         continue
 
-                # hIUD node (only if no fertility intent  AND not postpartum)
-                if (not fertility_intent[uid]) and (not postpartum[uid]) and (not self.tried_hiud[uid]):
+                # hIUD node (only if no fertility intent)
+                if (not fertility_intent[uid]) and (not self.tried_hiud[uid]):
                     started = self._offer_and_start(uid, 'hiud')
                     if started:
                         continue
