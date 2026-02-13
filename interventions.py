@@ -658,6 +658,8 @@ class HMBCarePathway(ss.Intervention):
                 mens.txa[uid] = True
             
             elif treatment_type == 'pill':
+                if self.sim.people.fp.postpartum[uid]:
+                    return 
                 # Set as contraceptive method
                 self.sim.people.fp.method[uid] = self.pill_idx
                 self.sim.people.fp.on_contra[uid] = True
@@ -668,11 +670,13 @@ class HMBCarePathway(ss.Intervention):
                 # Menstruation module will detect pill usage in step_states()
             
             elif treatment_type == 'hiud':
+                if self.sim.people.fp.postpartum[uid]:
+                    return 
                 # Set as contraceptive method
                 self.sim.people.fp.method[uid] = self.iud_idx
                 self.sim.people.fp.on_contra[uid] = True
                 self.sim.people.fp.ever_used_contra[uid] = True
-                mens.hiud_prone[uid] = True  # Mark as hormonal IUD user
+                self.sim.people.menstruation.hiud_prone[uid] = True
                 # Set method duration
                 method_dur = self.sim.connectors.contraception.set_dur_method(np.array([uid]))
                 self.sim.people.fp.ti_contra[uid] = self.ti + method_dur[0]
