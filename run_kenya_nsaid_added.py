@@ -6,9 +6,6 @@ Created on Mon Dec  1 16:15:35 2025
 @author: kirstinol
 """
 
-
-
-
 import numpy as np
 import pandas as pd
 import pylab as pl
@@ -85,8 +82,7 @@ plt.Config.show_rmse = False
 
 
 def make_pars():
-    pars = fp.make_fp_pars()  # For default pars
-    pars.update_location('kenya')
+    pars = {}
 
     # Modify individual fecundity and exposure parameters
     # These adjust each woman's probability of conception and exposure to pregnancy.
@@ -121,7 +117,6 @@ def make_sim(pars=None, stop=2021):
     mens = Menstruation()
     objective_data = pd.read_csv("data/kenya_objective.csv")
     attainment_data = pd.read_csv("data/kenya_initialization.csv")
-    births = ss.Births()
     edu = Education(objective_data=objective_data, attainment_data=attainment_data)
 
     # Run the sim
@@ -131,7 +126,6 @@ def make_sim(pars=None, stop=2021):
         n_agents=1000,
         location='kenya',
         pars=pars,
-        demographics=[births],
         analyzers=[fp.cpr_by_age(), fp.method_mix_by_age()],
         education_module=edu,
         connectors=[mens],
