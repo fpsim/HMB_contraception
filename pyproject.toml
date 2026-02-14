@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hmb_contraception"
+version = "0.1.0"
+description = "Modeling framework for analyzing the impact of contraceptive interventions on heavy menstrual bleeding"
+readme = "README.md"
+requires-python = ">=3.9,<3.14"
+license = {text = "MIT"}
+authors = [
+    {name = "Robyn Stuart", email = "robyn.stuart@gatesfoundation.org"}
+]
+keywords = [
+    "heavy menstrual bleeding",
+    "contraception",
+    "agent-based modeling",
+    "starsim",
+    "fpsim"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+]
+
+dependencies = [
+    "numpy>=1.20.0",
+    "pandas>=1.3.0",
+    "sciris>=3.0.0",
+    "starsim>=3.0.0",
+    "fpsim>=0.22.0",
+    "matplotlib>=3.4.0",
+    "seaborn>=0.11.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-xdist>=2.5.0",
+    "pylint>=2.15.0",
+    "ipython>=8.0.0",
+    "jupyter>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/starsimhub/HMB_contraception"
+Repository = "https://github.com/starsimhub/HMB_contraception"
+Issues = "https://github.com/starsimhub/HMB_contraception/issues"
+
+[tool.setuptools]
+py-modules = ["menstruation", "interventions", "education", "plot_sim"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*.py"]
+exclude = ["tests*", "devtests*"]
