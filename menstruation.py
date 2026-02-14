@@ -139,7 +139,6 @@ class Menstruation(ss.Connector):
             ss.BoolState('poor_mh', label="Poor menstrual hygiene"),
             ss.BoolState('pain', label="Menstrual pain"),
             ss.BoolState('hyst', label="Hysterectomy"),
-            ss.FloatArr('sev', label="Severity"),  # proxy for blood loss / pain severity?
 
             # Menstrual states
             ss.BoolState('menstruating'),

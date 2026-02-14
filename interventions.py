@@ -369,16 +369,33 @@ class hmb_package(ss.Intervention):
 class HMBCarePathway(ss.Intervention):
         """
         Sequential HMB treatment cascade following the intervention pathway.
-        Implements: HMB → Care-seeking → NSAID → TXA → Pill → hIUD
-    
-        Each individual progresses through treatments based on:
-            - Care-seeking behavior
-            - Treatment effectiveness
-            - Adherence
-            - Fertility intent 
-            - Postpartum status 
 
-            """
+        Pathway: HMB → Care-seeking → NSAID → TXA → Pill → hIUD
+
+        Each individual progresses through treatments based on:
+        - **Care-seeking behavior**: Logistic model with anemia/pain covariates
+          and individual propensity
+        - **Treatment efficacy**: Heterogeneous response; only responders
+          receive biological effect
+        - **Treatment effectiveness**: Assessed after 3 months based on HMB status
+        - **Adherence**: Stochastic with treatment-specific probabilities
+        - **Fertility intent**: Blocks access to pill/hIUD if planning pregnancy
+        - **Time-based duration**: Treatments automatically stop after set duration
+
+        Key features:
+        - Vectorized operations for performance with large populations
+        - Treatment responder system for realistic heterogeneous response
+        - Automatic treatment stopping via ti_stop_treatment
+        - Parallel treatment evaluation (not strictly sequential)
+        - Integration with FPsim for contraceptive methods (pill/hIUD)
+
+        States track:
+        - Treatment history (tried_*, *_offered, *_accepted)
+        - Current treatment status (on_treatment, current_treatment)
+        - Treatment outcomes (treatment_effective, adherent)
+        - Responder status (nsaid_responder, etc.)
+        - Care-seeking behavior (is_seeking_care, care_seeking_propensity)
+        """
         # Treatment encoding mapping
         treatment_map = {
             'none': 0,
@@ -553,7 +570,20 @@ class HMBCarePathway(ss.Intervention):
             return self.tried_nsaid & self.tried_txa & self.tried_pill & self.tried_hiud
 
         def step(self):
-            """Execute cascade at each timestep"""
+            """
+            Execute cascade at each timestep.
+
+            Order of operations:
+            1. Stop treatment for those whose ti_stop_treatment == ti
+            2. Determine who seeks care (reset each timestep)
+            3. Offer treatments to care-seekers (parallel evaluation)
+            4. Assess effectiveness for those past time_to_assess
+            5. Check adherence for those on treatment
+
+            Note: Treatments are stopped first to allow individuals whose
+            treatment just ended to immediately re-enter care-seeking if
+            their HMB persists.
+            """
             # Only run if intervention has started
             if self.sim.t.now() < self.pars.year:
                 return
@@ -577,8 +607,21 @@ class HMBCarePathway(ss.Intervention):
     
         def determine_care_seeking(self, uids=None):
             """
-            Determine who seeks care for HMB this timestep.
+            Determine who seeks care for HMB this timestep using logistic regression.
+
+            Care-seeking probability is influenced by:
+            - Baseline odds (50%)
+            - Anemia status (increases odds by factor exp(1) ≈ 2.7)
+            - Pain status (increases odds by factor exp(0.25) ≈ 1.3)
+            - Individual propensity (normally distributed multiplicative factor)
+
             Following the pathway: HMB → Seeking care?
+
+            Args:
+                uids: UIDs to check. If None, uses eligible individuals not on treatment.
+
+            Updates:
+                is_seeking_care: Set to True for those who seek care this timestep
             """
             self.is_seeking_care[:] = False
             if uids is None: uids = (self.is_eligible & ~self.on_treatment).uids
@@ -594,8 +637,29 @@ class HMBCarePathway(ss.Intervention):
     
         def offer_treatment(self, uids=None):
             """
-            Offer next treatment in cascade: NSAID → TXA → Pill → hIUD
-            Skip pill/hIUD if fertility_intent = True
+            Offer treatments in cascade: NSAID → TXA → Pill → hIUD.
+
+            All treatment options are evaluated in parallel for each individual.
+            Individuals can only be on one treatment at a time, so pill/hIUD
+            checks also verify not already on treatment.
+
+            Cascade logic:
+            - NSAID: Available to all seeking care who haven't tried it
+            - TXA: Available to all seeking care who haven't tried it
+            - Pill: Available if no fertility intent AND not on treatment
+            - hIUD: Available if no fertility intent AND not on treatment
+
+            Note: Treatments are marked as "tried" regardless of whether
+            they are offered or accepted, to prevent repeated attempts.
+
+            Args:
+                uids: UIDs eligible for treatment. If None, uses all seeking care.
+
+            Updates:
+                tried_*: Marks treatments as attempted
+                *_offered: Tracks which treatments were offered
+                *_accepted: Tracks which treatments were accepted
+                on_treatment: Set via _start_treatment for accepted treatments
             """
             # Treatment can be offered to those seeking care
             if uids is None: uids = self.is_seeking_care.uids
@@ -630,7 +694,23 @@ class HMBCarePathway(ss.Intervention):
     
         def _offer_and_start(self, uids, treatment_type):
             """
-            Offer and accept logic for a treatment node.
+            Offer treatment to individuals and start for those who accept.
+
+            Process:
+            1. Mark all as "tried" (even if not offered or accepted)
+            2. Randomly select who is offered based on prob_offer
+            3. Randomly select who accepts from those offered based on prob_accept
+            4. Start treatment for those who accept
+
+            Args:
+                uids: Array of UIDs eligible for this treatment
+                treatment_type: One of 'nsaid', 'txa', 'pill', 'hiud'
+
+            Updates:
+                tried_{treatment_type}: All UIDs marked as tried
+                {treatment_type}_offered: Subset who were offered
+                {treatment_type}_accepted: Subset who accepted
+                Plus all states updated by _start_treatment for acceptors
             """
             # Regardless of whether the treatment is offered/accepted, it's still recorded as "tried"
             # Why is this??
@@ -651,8 +731,43 @@ class HMBCarePathway(ss.Intervention):
 
         def _start_treatment(self, uids, tx):
             """
-            Start a specific treatment
-            Updates both intervention states AND menstruation module states.
+            Start treatment for individuals who accepted.
+
+            Updates both intervention tracking states AND menstruation module states.
+            Only treatment responders have their menstruation module states updated,
+            implementing heterogeneous treatment response.
+
+            Treatment-specific logic:
+            - NSAID/TXA:
+              * Only responders get menstruation module state set
+              * Duration drawn from uniform distribution (10-14 months)
+              * Stop time calculated as ti + duration
+            - Pill/hIUD:
+              * Set as contraceptive method via FPsim
+              * Duration and efficacy managed by FPsim contraception connector
+              * Stop time set based on FPsim-assigned duration
+
+            Args:
+                uids: Array of UIDs who accepted treatment
+                tx: Treatment type ('nsaid', 'txa', 'pill', 'hiud')
+
+            Updates:
+                tried_{tx}: Marks as attempted
+                current_treatment: Sets to treatment code (1-4)
+                on_treatment: Set to True
+                ti_start_treatment: Records start time
+                treatment_assessed: Reset to False
+                dur_treatment: Treatment duration
+                ti_stop_treatment: Scheduled stop time
+
+                For responders only:
+                    menstruation.{tx}: Set to True (NSAID/TXA)
+
+                For pill/hIUD:
+                    fp.method: Set to pill/IUD index
+                    fp.on_contra: Set to True
+                    fp.ever_used_contra: Set to True
+                    fp.ti_contra: Set to stop time
             """
             # Mark as tried
             getattr(self, f"tried_{tx}")[uids] = True
@@ -698,10 +813,26 @@ class HMBCarePathway(ss.Intervention):
     
         def assess_treatment_effectiveness(self):
             """
-            After time_to_assess months, check if HMB has improved.
-            
-            Treatment is considered effective if the person's HMB status has resolved.
-            The effect is determined by hmb_pred coefficients in menstruation.py
+            Assess treatment effectiveness after time_to_assess period (default: 3 months).
+
+            Treatment is considered effective if HMB status has resolved. The biological
+            effect is determined by hmb_pred coefficients in the menstruation module
+            (only responders receive this effect).
+
+            Process:
+            1. Find individuals on treatment who haven't been assessed yet
+            2. Check if time_to_assess has elapsed since treatment start
+            3. Check current HMB status
+            4. If HMB resolved: mark as effective, continue to adherence check
+            5. If HMB persists: mark as ineffective, schedule stop for next timestep
+
+            Updates:
+                treatment_assessed: Marks individuals as assessed
+                treatment_effective: True if HMB resolved, False otherwise
+                ti_stop_treatment: Set to ti+1 for ineffective treatments
+
+            Note: Failed treatments are automatically stopped at the next timestep,
+            allowing individuals to try the next option in the cascade.
             """
             
             # Find those ready to assess
@@ -729,8 +860,30 @@ class HMBCarePathway(ss.Intervention):
     
         def check_adherence(self, uids=None):
             """
-            For those with effective treatment, check adherence.
-            Following pathway: Does she adhere? → Yes/No
+            Check adherence for individuals currently on treatment.
+
+            Adherence probabilities are treatment-specific:
+            - NSAID: 70%
+            - TXA: 60%
+            - Pill: 75%
+            - hIUD: 85%
+
+            Process:
+            1. Get adherence probability for each individual's current treatment
+            2. Randomly determine adherence based on these probabilities
+            3. Non-adherent individuals scheduled to stop at next timestep
+
+            Following pathway: Treatment effective? → Does she adhere? → Yes/No
+
+            Args:
+                uids: UIDs to check. If None, uses all individuals on treatment.
+
+            Updates:
+                adherent: Set to True for adherent individuals
+                ti_stop_treatment: Set to ti+1 for non-adherent individuals
+
+            Note: Adherence is only checked for those on treatment, regardless
+            of whether treatment has been assessed as effective yet.
             """
             # Check adherence for those who are on treatment
             if uids is None: uids = self.on_treatment.uids
@@ -752,8 +905,33 @@ class HMBCarePathway(ss.Intervention):
     
         def stop_treatment(self, uids=None, success=False):
             """
-            Stop current treatment.
-            Updates both intervention states AND menstruation module states.
+            Stop treatment for individuals whose ti_stop_treatment equals current time.
+
+            This is called at the beginning of each step to stop treatments that have
+            reached their scheduled end time (either from duration completion,
+            ineffectiveness, or non-adherence).
+
+            Process:
+            1. Identify individuals whose ti_stop_treatment == current ti
+            2. Reset menstruation module states for NSAID/TXA
+            3. Reset all intervention tracking states
+
+            Args:
+                uids: UIDs to stop treatment for. If None, finds all with ti_stop_treatment==ti
+                success: Unused parameter (kept for compatibility)
+
+            Updates:
+                menstruation.nsaid: Set to False for NSAID stoppers
+                menstruation.txa: Set to False for TXA stoppers
+                current_treatment: Reset to 0
+                on_treatment: Set to False
+                dur_treatment: Set to NaN
+                treatment_effective: Reset to False
+                treatment_assessed: Reset to False
+
+            Note: Pill/hIUD contraceptive states are not reset here as they are
+            managed by FPsim. Individuals remain on contraception for contraceptive
+            purposes even if HMB treatment has ended.
             """
             if uids is None: uids = (self.ti_stop_treatment == self.ti).uids
             if len(uids) is None:
