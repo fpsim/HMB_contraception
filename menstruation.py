@@ -63,21 +63,8 @@ class Menstruation(ss.Connector):
             hmb_pred=sc.objdict(  # Parameters for HMB prediction
                 # Baseline odds that those prone to HMB will experience it this timestep
                 # This is converted to an intercept in the logistic regression: -np.log(1/base-1)
+                # Treatment effects are now handled via responder status in HMBCarePathway intervention
                 base=0.995,
-                # Effect of hormonal pill on HMB - placeholder.
-                # Interpretation: baseline odds without pill is 0.5
-                # Odds with pill is 1/(1+exp(-(0-3)))=0.047, i.e. reduces odds by ~90%
-                pill=-3,
-                # Effect of IUD on HMB - placeholder
-                # Interpretation: baseline odds without pill is 1/(1+exp(-(0)))=0.5
-                # Odds with IUD is 1/(1+exp(-(0-10)))=0.000045, i.e. reduces odds by ~99%
-                hiud=-10,
-                # Effect of tranexamic acid on HMB - placeholder
-                # Odds with TX is 1/(1+exp(-(0-2)))=0.119, i.e. reduces odds by ~76%
-                txa=-2,
-                # Effect of NSAIDs on HMB - placeholder
-                # Assume about half as effective as TXA, so 1/(1+exp(-(0-1))) = 0.269
-                nsaid=-1
             ),
 
             # Non-permanent sequelae of HMB
@@ -221,16 +208,18 @@ class Menstruation(ss.Connector):
         return
 
     def set_hmb(self, uids):
-        """ Set who will experience heavy menstrual bleeding (HMB) """
-        # Calculate the probability of HMB (based on interventions)
+        """
+        Set who will experience heavy menstrual bleeding (HMB).
 
+        HMB is determined by:
+        1. Base probability (for hmb_prone individuals)
+        2. Age-specific odds ratios
+        3. Treatment responder status (applied after probability calculation)
+        """
+        # Calculate the probability of HMB based on base odds and age
         intercept = -np.log(1/self.pars.hmb_pred.base-1)
         rhs = np.full_like(uids, fill_value=intercept, dtype=float)
-        
-        # Add intervention effects
-        for term, val in self.pars.hmb_pred.items():
-               if term != 'base':
-                    rhs += val * getattr(self, term)[uids]
+
         # Apply age-specific odds ratios
         ages = self.sim.people.age[uids]
         age_adjustments = np.zeros_like(uids, dtype=float)
@@ -243,6 +232,7 @@ class Menstruation(ss.Connector):
         age_adjustments[age_20_44] = np.log(self.pars.hmb_age_OR["20-44"])
         age_adjustments[age_45_plus] = np.log(self.pars.hmb_age_OR["45-59"])
         rhs += age_adjustments
+
         # Calculate the probability
         p_hmb = 1 / (1+np.exp(-rhs))
 
@@ -252,6 +242,38 @@ class Menstruation(ss.Connector):
         has_hmb = self._p_hmb.filter(uids)
         # set hmb among those uids filtered above
         self.hmb[has_hmb] = True
+
+        # Apply treatment responder logic to remove HMB from responders
+        # Find the HMB care pathway intervention
+        pathway = None
+        if hasattr(self.sim, 'interventions'):
+            for intv in self.sim.interventions.values():
+                if hasattr(intv, 'treatment_map'):
+                    pathway = intv
+                    break
+
+        if pathway is not None:
+            # For each treatment, remove HMB from responders currently on that treatment
+            # NSAID
+            on_nsaid = pathway.current_treatment == pathway.treatment_map['nsaid']
+            nsaid_responders = on_nsaid & pathway.nsaid_responder
+            self.hmb[nsaid_responders.uids] = False
+
+            # TXA
+            on_txa = pathway.current_treatment == pathway.treatment_map['txa']
+            txa_responders = on_txa & pathway.txa_responder
+            self.hmb[txa_responders.uids] = False
+
+            # Pill
+            on_pill = pathway.current_treatment == pathway.treatment_map['pill']
+            pill_responders = on_pill & pathway.pill_responder
+            self.hmb[pill_responders.uids] = False
+
+            # hIUD
+            on_hiud = pathway.current_treatment == pathway.treatment_map['hiud']
+            hiud_responders = on_hiud & pathway.hiud_responder
+            self.hmb[hiud_responders.uids] = False
+
         return
 
 
