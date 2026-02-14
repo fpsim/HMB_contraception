@@ -228,8 +228,18 @@ def plot_stochastic_results(stats, years_annual, years_monthly, si_annual, si_mo
     
     set_font(10)
     
-    fig, axes = pl.subplots(3, 3, figsize=(15, 9))
-    axes = axes.ravel()
+    n_panels = len(res_to_plot)
+
+    # choose layout: 1 row if <=3, else 2 rows, etc.
+    ncols = min(3, n_panels)
+    nrows = int(np.ceil(n_panels / ncols))
+
+    fig, axes = pl.subplots(nrows, ncols, figsize=(5*ncols, 3.5*nrows))
+    axes = np.atleast_1d(axes).ravel()
+
+    # if extra axes exist (e.g. 2x2 for 3 panels), hide them
+    for ax in axes[n_panels:]:
+        ax.set_visible(False)
     
     lw = 2.5  # line width
     
@@ -238,15 +248,28 @@ def plot_stochastic_results(stats, years_annual, years_monthly, si_annual, si_mo
         
         if res == 'prop_disrupted':
             years = years_monthly
-            si = si_monthly
+           # si = si_monthly
         else:
             years = years_annual
-            si = si_annual
+            #si = si_annual
+            
+        # Set x-ticks every 3 years (or change to 2 for every 2 years)
+        year_min = int(np.floor(years.min()))
+        year_max = int(np.ceil(years.max()))
+        ax.set_xticks(np.arange(year_min, year_max + 1, 3))  # Change 3 to 2 for every 2 years
+        ax.set_xlim([year_min, year_max])
+    
 
         # Plot each scenario with uncertainty bands
         for scenario in scenarios_to_plot:
             if scenario not in stats:
                 continue
+            
+            # SKIP BASELINE FOR AVERTED METRICS
+            if res in ("n_disruptions", "n_anemia") and scenario == 'baseline':
+                continue
+            
+            print(f"Plotting {scenario} for {res}")  # DEBUG
             
             # Ensure stats series align with the provided years array
             ylen = len(years)
@@ -254,19 +277,40 @@ def plot_stochastic_results(stats, years_annual, years_monthly, si_annual, si_mo
             if res in ("n_disruptions", "n_anemia"):
                 # compute "averted" relative to baseline for this year-range
                 # baseline series (last ylen elements)
+                # Find intervention start index
+                intervention_year = 2026
+                intervention_idx = np.where(years >= intervention_year)[0]
+    
+                if len(intervention_idx) > 0:
+                    interv_start = intervention_idx[0]
+                else:
+                    interv_start = 0
+    
+                # Get full series
                 base_mean = stats['baseline'][res]['mean'][-ylen:]
-                base_lower = stats['baseline'][res]['lower'][-ylen:]
-                base_upper = stats['baseline'][res]['upper'][-ylen:]
-
                 scen_mean = stats[scenario][res]['mean'][-ylen:]
-                scen_lower = stats[scenario][res]['lower'][-ylen:]
-                scen_upper = stats[scenario][res]['upper'][-ylen:]
-
-                # averted = baseline - scenario
-                mean = base_mean - scen_mean
-                # For CI on difference, use conservative bounds:
-                lower = base_lower - scen_upper
-                upper = base_upper - scen_lower
+    
+                # Initialize with zeros
+                mean = np.zeros(ylen)
+                lower = np.zeros(ylen)
+                upper = np.zeros(ylen)
+    
+                # Only compute averted for post-intervention period
+                if interv_start < ylen:
+                    base_lower = stats['baseline'][res]['lower'][-ylen:]
+                    base_upper = stats['baseline'][res]['upper'][-ylen:]
+                    scen_lower = stats[scenario][res]['lower'][-ylen:]
+                    scen_upper = stats[scenario][res]['upper'][-ylen:]
+        
+                    mean[interv_start:] = base_mean[interv_start:] - scen_mean[interv_start:]
+                    lower[interv_start:] = base_lower[interv_start:] - scen_upper[interv_start:]
+                    upper[interv_start:] = base_upper[interv_start:] - scen_lower[interv_start:]
+                
+                # hard-zero anything pre-2026 (safety)
+                pre = years < intervention_year
+                mean[pre]  = np.nan
+                lower[pre] = np.nan
+                upper[pre] = np.nan
 
                # keep units as counts (do NOT multiply by 100)
             else:        
@@ -283,7 +327,7 @@ def plot_stochastic_results(stats, years_annual, years_monthly, si_annual, si_mo
             ax.plot(years, mean, label=label_map.get(scenario, scenario), 
                    color=colors[scenario], linewidth=lw)
             # Plot uncertainty band (95% CI)
-            ax.fill_between(years, lower, upper, color=colors[scenario], alpha=0.2)
+            ax.fill_between(years, lower, upper, color=colors[scenario], alpha=0.08)
         
         # Add vertical line for intervention start
         ax.axvline(x=2026, color='k', ls='--', linewidth=1.5)
@@ -552,14 +596,14 @@ if __name__ == '__main__':
 
     if 'run_stochastic' in to_run:
         # run the scenarios for multiple random seeds
-        n_seeds = 2
+        n_seeds = 10
         
         colors = {
             'hiud2':  '#372248',    # dark purple
             'hiud5':  '#3C427C',    # blue-ish purple
             'hiud8':  '#4E57A6',    # 
-            'p25': '#ffa500',        # orange
-            'p50': '#ff8c00',        # darker orange
+            'p25': '#ffa500',        # orange 
+            'p50': '#ff8c00',        # darker orange 
             'baseline': '#6c757d'   # dark gray
         }
                 
@@ -572,18 +616,38 @@ if __name__ == '__main__':
                 
                 # only hIUD - 2% coverage
                 s_hiud2 = make_sim(stop=2032)
-                s_hiud2['pars']['interventions'] = [hiud_hmb(prob_offer=0.02, prob_accept=0.5)]
+                s_hiud2['pars']['interventions'] = [hiud_hmb(prob_offer=0.5, prob_accept=0.02)]
                 s_hiud2['pars']['rand_seed'] = seed
                 
                 # only hIUD - 5% coverage
                 s_hiud5 = make_sim(stop=2032)
-                s_hiud5['pars']['interventions'] = [hiud_hmb(prob_offer=0.05, prob_accept=0.5)]
+                s_hiud5['pars']['interventions'] = [hiud_hmb(prob_offer=0.5, prob_accept=0.05)]
                 s_hiud5['pars']['rand_seed'] = seed
                 
                 # only hIUD - 8% coverage
                 s_hiud8 = make_sim(stop=2032)
-                s_hiud8['pars']['interventions'] = [hiud_hmb(prob_offer=0.08, prob_accept=0.5)]
+                s_hiud8['pars']['interventions'] = [hiud_hmb(prob_offer=0.5, prob_accept=0.08)]
                 s_hiud8['pars']['rand_seed'] = seed
+                
+                
+                # full package - 25 % of eligible pop
+                s_p25 = make_sim(stop=2032)
+                s_p25['pars']['interventions'] = [hmb_package(prob_offer=0.25, 
+                                                 prob_accept_nsaid=0.25,
+                                                 prob_accept_txa=0.25, 
+                                                 prob_accept_pill=0.25,
+                                                 prob_accept_hiud=0.05)]
+                s_p25['pars']['rand_seed'] = seed
+    
+                # full package - 50 % of eligible pop
+                s_p50 = make_sim(stop=2032)
+                s_p50['pars']['interventions'] = [hmb_package(prob_offer=0.5, 
+                                                 prob_accept_nsaid=0.5,
+                                                 prob_accept_txa=0.5, 
+                                                 prob_accept_pill=0.5,
+                                                 prob_accept_hiud=0.05)]
+                s_p50['pars']['rand_seed'] = seed
+            
             
                 # # only NSAID - 20% coverage
                 # s_nsaid20 = make_sim(stop=2032)
@@ -599,25 +663,7 @@ if __name__ == '__main__':
                 # s_pill20 = make_sim(stop=2032)
                 # s_pill20['pars']['interventions'] = [pill_hmb(prob_offer=0.2, prob_accept=0.5)]
                 # s_pill20['pars']['rand_seed'] = seed
-                
-                # full package - 25 % of eligible pop
-                s_p25 = make_sim(stop=2032)
-                s_p25['pars']['interventions'] = [hmb_package(prob_offer=0.25, 
-                                                 prob_accept_nsaid=0.5,
-                                                 prob_accept_txa=0.5, 
-                                                 prob_accept_pill=0.5,
-                                                 prob_accept_hiud=0.05)]
-                s_p25['pars']['rand_seed'] = seed
-    
-                # full package - 50 % of eligible pop
-                s_p50 = make_sim(stop=2032)
-                s_p50['pars']['interventions'] = [hmb_package(prob_offer=0.5, 
-                                                 prob_accept_nsaid=0.5,
-                                                 prob_accept_txa=0.5, 
-                                                 prob_accept_pill=0.5,
-                                                 prob_accept_hiud=0.05)]
-                s_p50['pars']['rand_seed'] = seed
-                
+                                
                 # full package - 60 % of eligible pop
                 #s_p75 = make_sim(stop=2032)
                 #s_p75['pars']['interventions'] = [hmb_package(prob_offer=0.75, 
@@ -632,7 +678,7 @@ if __name__ == '__main__':
                 m = ss.parallel([s_base, s_hiud2, s_hiud5, s_hiud8, s_p25, s_p50], 
                                 parallel=True)
                 # replace sims with run versions
-                s_base, s_hiud2, s_hiud5, s_hiud8, s_p25, s_p50, s_p75 = m.sims[:]  
+                s_base, s_hiud2, s_hiud5, s_hiud8, s_p25, s_p50 = m.sims[:]  
                 
                 # --- save results
                 sc.saveobj(outfolder_stochastic+f'kenya_package_base_seed{seed}.sim', s_base)
@@ -796,7 +842,7 @@ if __name__ == '__main__':
         
     # ---- PLOT: Subset of scenarios, variable scale
     # define the subset of scenarios
-    scenarios_subset = ['baseline', 'hiud25', 'hiud50', 'p50']
+    scenarios_subset = ['p25','p50']
         # make the plots
     plot_stochastic_results(
             stats=stats, years_annual=years_annual, 
@@ -806,8 +852,8 @@ if __name__ == '__main__':
             scenarios_to_plot=scenarios_subset,
             fixed_scale=False,
             plotfolder=plotfolder_stochastic,
-            res_to_plot=['hiud', 'pill', 'hmb', 'poor_mh', 'anemic', 'n_anemia','pain', 'prop_disrupted','n_disruptions'],  
-            labels=['hIUD Usage', 'pill Usage', 'HMB', 'Poor MH', 'Anemic','Anemia',  'Pain', 'Disruption','Disruption'],    
+            res_to_plot=[ 'hmb', 'n_anemia','n_disruptions'],  
+            labels=[ 'HMB', 'Anemia', 'Disruption'],  
             filename='hmb_package_stochastic_results_subset-scenarios.png'
         )
         
