@@ -12,6 +12,70 @@ This package extends [Starsim](https://github.com/starsimhub/starsim) and [FPsim
 - Educational impacts of HMB
 - Population-level outcomes
 
+## Care treatment pathway
+
+The model implements a sequential care cascade for HMB management, where individuals progress through treatment options based on care-seeking behavior, treatment effectiveness, and adherence:
+
+```mermaid
+flowchart TD
+    A[Heavy Menstrual Bleeding] --> B{Seeking care?}
+    B -->|No| Z[No treatment]
+    B -->|Yes| C{Offered NSAID?}
+
+    C -->|Yes| D{Accepts NSAID?}
+    C -->|No| E{Offered TXA?}
+    D -->|No| E
+    D -->|Yes| F[On NSAID]
+
+    E -->|Yes| G{Accepts TXA?}
+    E -->|No| H{Offered Pill?}
+    G -->|No| H
+    G -->|Yes| I[On TXA]
+
+    H -->|Yes & No fertility intent| J{Accepts Pill?}
+    H -->|No or Has fertility intent| K{Offered hIUD?}
+    J -->|No| K
+    J -->|Yes| L[On Pill]
+
+    K -->|Yes & No fertility intent| M{Accepts hIUD?}
+    K -->|No or Has fertility intent| Z
+    M -->|No| Z
+    M -->|Yes| N[On hIUD]
+
+    F --> O{Effective after 3 months?}
+    I --> O
+    L --> O
+    N --> O
+
+    O -->|Yes| P{Adherent?}
+    O -->|No| Q[Stop treatment]
+
+    P -->|Yes| R[Continue treatment]
+    P -->|No| Q
+
+    Q --> B
+    R --> S{Treatment duration ends?}
+    S -->|Yes| B
+    S -->|No| R
+
+    style A fill:#ffcccc
+    style F fill:#ccffcc
+    style I fill:#ccffcc
+    style L fill:#ccffcc
+    style N fill:#ccffcc
+    style R fill:#ccffcc
+    style Z fill:#ffeecc
+```
+
+**Key features of the pathway:**
+- **Care-seeking behavior**: Influenced by anemia status, menstrual pain, and individual propensity
+- **Sequential cascade**: NSAID → TXA → Pill → hIUD
+- **Fertility intent**: Blocks access to hormonal contraceptives (pill/hIUD) for women planning pregnancy
+- **Treatment effectiveness**: Assessed after 3 months based on HMB resolution
+- **Adherence**: Stochastic with treatment-specific probabilities (NSAID: 70%, TXA: 60%, Pill: 75%, hIUD: 85%)
+- **Treatment duration**: Automatic stopping after predefined duration or due to ineffectiveness/non-adherence
+- **Re-entry**: Individuals whose treatment stops can re-enter the care pathway if HMB persists
+
 ## Installation
 
 ### Quick install
