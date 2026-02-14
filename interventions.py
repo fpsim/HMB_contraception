@@ -460,6 +460,7 @@ class HMBCarePathway(ss.Intervention):
                 ss.BoolState('tried_hiud', default=False),
 
                 # States representing treatment responsiveness
+                # TODO, does this make sense, or better to assess another way?
                 ss.BoolState('nsaid_responder', default=ss.bernoulli(p=self.pars.efficacy['nsaid'])),
                 ss.BoolState('txa_responder', default=ss.bernoulli(p=self.pars.efficacy['txa'])),
                 ss.BoolState('pill_responder', default=ss.bernoulli(p=self.pars.efficacy['pill'])),
@@ -551,10 +552,6 @@ class HMBCarePathway(ss.Intervention):
             """ Tried all available treatments """
             return self.tried_nsaid & self.tried_txa & self.tried_pill & self.tried_hiud
 
-        def init_pre(self, sim):
-            super().init_pre(sim)
-            return
-        
         def step(self):
             """Execute cascade at each timestep"""
             # Only run if intervention has started
@@ -758,67 +755,29 @@ class HMBCarePathway(ss.Intervention):
             Stop current treatment.
             Updates both intervention states AND menstruation module states.
             """
-            # treatment = self.treatment_reverse_map[self.current_treatment[uid]]
-            # mens = self.sim.people.menstruation
+            if uids is None: uids = (self.ti_stop_treatment == self.ti).uids
+            if len(uids) is None:
+                return
+
+            mens = self.sim.people.menstruation
         
-            # # Reset menstruation module treatment states
-            # if treatment == 'nsaid':
-            #     mens.nsaid[uids] = False
-            
-            # elif treatment == 'txa':
-            #     mens.txa[uids] = False
-            
-            # elif treatment in ['pill', 'hiud']:
-            #     # Keep contraceptive method (they might continue for contraception)
-            #     # Or optionally reset:
-            #     # self.sim.people.fp.method[uid] = 0
-            #     # self.sim.people.fp.on_contra[uid] = False
-            #     pass
-        
-            # # Reset tracking states
-            # self.current_treatment[uid] = 0
-            # self.on_treatment[uid] = False
-            # self.treatment_duration[uid] = 0
-            # self.treatment_effective[uid] = False
-            # self.treatment_assessed[uid] = False
-        
-            # if not success:
-            #    # Treatment failed/discontinued - can try next option
-            #    # seeking_care stays True
-            #    pass
-            # else:
-            #     # Successfully completed treatment duration
-            #     self.seeking_care[uid] = False
-            #     self.adherent[uid] = False
-        
+            # Reset menstruation module treatment states for NSAID and TXA. Don't need to 
+            # do this for pill or IUD because FPsim handles them.
+            nsaid_idx = self.treatment_map['nsaid']
+            nsaid_stoppers = uids & (self.current_treatment == nsaid_idx)
+            mens.nsaid[nsaid_stoppers] = False
+            txa_idx = self.treatment_map['txa']
+            txa_stoppers = uids & (self.current_treatment == txa_idx)
+            mens.txa[txa_stoppers] = False
+                    
+            # Reset tracking states
+            self.current_treatment[uids] = 0
+            self.on_treatment[uids] = False
+            self.dur_treatment[uids] = np.nan
+            self.treatment_effective[uids] = False
+            self.treatment_assessed[uids] = False
+
             return
-    
-        # def update_treatment_duration(self):
-        #     """
-        #     Increment duration for those on treatment.
-        #     Check if treatment duration is complete.
-        #     """
-        #     on_treatment_uids = self.on_treatment.uids
-        
-        #     if len(on_treatment_uids) == 0:
-        #         return
-        
-        #     # Increment duration (convert to months)
-        #     self.treatment_duration[on_treatment_uids] += self.sim.t.dt_year * 12
-        
-        #     # Check if anyone completed their duration
-        #     for uid in on_treatment_uids:
-        #        if not self.adherent[uid]:
-        #            continue
-            
-        #        treatment = self.treatment_reverse_map[self.current_treatment[uid]]
-        #        max_duration = self.pars.treatment_duration_months[treatment]
-            
-        #        if self.treatment_duration[uid] >= max_duration:
-        #             # Completed successfully
-        #             self._stop_treatment(uid, success=True)
-        
-        #     return
     
         def update_results(self):
             """Track cascade metrics"""
