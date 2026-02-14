@@ -9,28 +9,19 @@ from education import Education
 from interventions import HMBCarePathway
 
 
-def make_pars():
-    pars = {}
-    pars['exposure_factor'] = 2
-    pars['prob_use_intercept'] = -1
-    
-    return pars
+# def make_pars():
+#     pars = {}
+#     pars['exposure_factor'] = 2
+#     pars['prob_use_intercept'] = -1
+#     return pars
 
 # Create modules
 mens = Menstruation()
-births = ss.Births(birth_rate=ss.peryear(25) )
 edu = Education()  # No data files needed for testing
 
 # Create pathway intervention
 pathway = HMBCarePathway(
     year=2020,  # Start immediately for testing
-    prob_seek_care=ss.bernoulli(p=0.6),  # 60% seek care
-    adherence=sc.objdict(
-        nsaid=0.7,
-        txa=0.7,
-        pill=0.7,
-        hiud=0.7,
-    ),
     time_to_assess=2,  # Assess after 2 months 
 )
 
@@ -40,8 +31,7 @@ sim = fp.Sim(
     stop=2025,
     n_agents=1000,
     location='kenya',
-    pars=make_pars(),
-    demographics=[births],
+    # pars=make_pars(),
     education_module=edu,
     connectors=[mens],
     interventions=[pathway],

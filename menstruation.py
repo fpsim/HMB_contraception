@@ -1,10 +1,11 @@
 """
 Heavy Menstrual Bleeding
-Adds an agent state to proxy heavy menstrual bleeding and initializes state 
+Adds an agent state to proxy heavy menstrual bleeding and initializes state
 """
 import numpy as np
 import sciris as sc
 import starsim as ss
+from utils import logistic
 
 
 
@@ -138,6 +139,7 @@ class Menstruation(ss.Connector):
             ss.BoolState('poor_mh', label="Poor menstrual hygiene"),
             ss.BoolState('pain', label="Menstrual pain"),
             ss.BoolState('hyst', label="Hysterectomy"),
+            ss.FloatArr('sev', label="Severity"),  # proxy for blood loss / pain severity?
 
             # Menstrual states
             ss.BoolState('menstruating'),
@@ -156,7 +158,6 @@ class Menstruation(ss.Connector):
             ss.BoolState('nsaid', label="Using NSAIDs"),
             ss.BoolState('hiud_prone', label="Prone to use hormonal IUD, if using IUD"),
             
-
         )
 
         return
@@ -186,7 +187,6 @@ class Menstruation(ss.Connector):
     def lt40(self):
         return (self.sim.people.age < 40) & self.sim.people.female
     
-    
     # get ids of women within age limit ( < upper_age )
     def _get_uids(self, upper_age=None):
         """ Get uids of females younger than upper_age """
@@ -207,7 +207,6 @@ class Menstruation(ss.Connector):
         
         return
 
-
     def init_post(self):
         """ Initialize with sim properties """
         super().init_post()
@@ -220,23 +219,7 @@ class Menstruation(ss.Connector):
         self._annual_anemia_cases = 0  
         self._last_year_anemia = self.sim.t.year  
 
-
         return
-
-
-    def _logistic(self, uids, pars):
-        """ Calculate logistic regression probabilities """
-        intercept = -np.log(1/pars.base-1)
-        rhs = np.full_like(uids, fill_value=intercept, dtype=float)
-
-        # Add all covariates
-        for term, val in pars.items():
-            if term != 'base':
-                rhs += val * getattr(self, term)[uids]
-
-        # Calculate the probability
-        return 1 / (1+np.exp(-rhs))
-
 
     def set_hmb(self, uids):
         """ Set who will experience heavy menstrual bleeding (HMB) """
@@ -297,7 +280,7 @@ class Menstruation(ss.Connector):
             attr_dist.set(0)
 
             # Calculate the probability of the sequelae
-            p_val = self._logistic(mens_uids, p)
+            p_val = logistic(self, mens_uids, p)
             attr_dist = getattr(self, f'_p_{seq}')
             attr_dist.set(p_val)
             has_attr = attr_dist.filter(mens_uids)
@@ -309,7 +292,7 @@ class Menstruation(ss.Connector):
 
         # Set hysterectomy state
         hyst_sus = (self.menstruating & ~self.hyst).uids
-        p_hyst = self._logistic(hyst_sus, self.pars.hyst)
+        p_hyst = logistic(self, hyst_sus, self.pars.hyst)
         self._p_hyst.set(0)
         self._p_hyst.set(p_hyst)
         has_hyst = self._p_hyst.filter(hyst_sus)
