@@ -23,7 +23,7 @@ import sciris as sc
 from menstruation import Menstruation
 from education import Education
 from interventions import HMBCarePathway
-from analyzers import track_care_seeking
+from analyzers import track_care_seeking, track_tx_eff
 
 
 # ============================================================================
@@ -58,6 +58,7 @@ def intervention_sim():
         time_to_assess=2,
     )
     care_analyzer = track_care_seeking()
+    tx_eff_analyzer = track_tx_eff()
 
     sim = fp.Sim(
         start=2020,
@@ -67,7 +68,7 @@ def intervention_sim():
         education_module=edu,
         connectors=[mens],
         interventions=[pathway],
-        analyzers=[care_analyzer],
+        analyzers=[care_analyzer, tx_eff_analyzer],
         verbose=0,
     )
     return sim
@@ -126,7 +127,7 @@ def test_care_seeking(sim):
 # Treatment responder rates match efficacy parameters
 # ============================================================================
 
-def test_tx_eff():
+def test_tx_eff(sim):
     """
     Test that proportion of treatment responders matches efficacy parameters
 
@@ -134,6 +135,58 @@ def test_tx_eff():
     - Each treatment's actual response rate should match its efficacy parameter
     - Response rates should be within statistical confidence intervals
     """
+    from scipy import stats
+
+    # Get analyzer and pathway intervention
+    analyzer = sim.analyzers.track_tx_eff
+    pathway = sim.interventions.hmb_care_pathway
+
+    # Track test results
+    all_passed = True
+
+    # Test each treatment
+    for tx_name in ['nsaid', 'txa', 'pill', 'hiud']:
+        n_assessed = analyzer.n_assessed[tx_name]
+        n_effective = analyzer.n_effective[tx_name]
+        expected_eff = pathway.pars.efficacy[tx_name]
+
+        print(f'\n  {tx_name.upper()}:')
+        print(f'    Expected efficacy: {expected_eff:.1%}')
+
+        if n_assessed == 0:
+            print(f'    WARNING: No assessments recorded - skipping test')
+            continue
+
+        if n_assessed < 30:
+            print(f'    WARNING: Only {n_assessed} assessments - small sample size')
+
+        # Calculate actual efficacy
+        actual_eff = n_effective / n_assessed
+        print(f'    Actual efficacy:   {actual_eff:.1%} ({n_effective}/{n_assessed})')
+
+        # Calculate 95% confidence interval for the actual rate
+        # Using Wilson score interval (better for proportions)
+        ci = stats.binom.interval(0.95, n_assessed, actual_eff)
+        ci_lower = ci[0] / n_assessed
+        ci_upper = ci[1] / n_assessed
+        print(f'    95% CI:            [{ci_lower:.1%}, {ci_upper:.1%}]')
+
+        # Perform binomial test: does observed data fit expected proportion?
+        # Null hypothesis: true efficacy = expected efficacy
+        result = stats.binomtest(n_effective, n_assessed, expected_eff, alternative='two-sided')
+        p_value = result.pvalue
+        print(f'    P-value:           {p_value:.3f}')
+
+        # Test passes if p-value > 0.05 (can't reject null hypothesis)
+        if p_value < 0.05:
+            print(f'    ✗ FAILED: Actual efficacy significantly different from expected')
+            all_passed = False
+        else:
+            print(f'    ✓ Passed: Actual efficacy consistent with expected')
+
+    # Overall assertion
+    assert all_passed, "One or more treatments had efficacy rates significantly different from expected"
+
     return
 
 
@@ -207,7 +260,7 @@ if __name__ == '__main__':
     print('✓ Passed\n')
 
     print('Test 2: Treatment responder rates match efficacy parameters')
-    test_tx_eff()
+    test_tx_eff(sim_intv)
     print('✓ Passed\n')
 
     print('Test 3: Treatment durations follow expected distributions')

@@ -7,6 +7,93 @@ import starsim as ss
 import sciris as sc
 
 
+class track_tx_eff(ss.Analyzer):
+    """
+    Track treatment effectiveness rates for each treatment type.
+
+    Captures data at the point of assessment (after time_to_assess period)
+    to calculate actual efficacy rates before treatments are stopped.
+
+    For each treatment (NSAID, TXA, Pill, hIUD), tracks:
+    - Total number of people assessed
+    - Number who had effective treatment (HMB resolved)
+    - Actual efficacy rate (effective / assessed)
+
+    This analyzer requires sim.interventions.hmb_care_pathway.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # Track which UIDs we've already counted to avoid double-counting
+        self.counted_uids = {'nsaid': set(), 'txa': set(), 'pill': set(), 'hiud': set()}
+
+        # Cumulative counts
+        self.n_assessed = {'nsaid': 0, 'txa': 0, 'pill': 0, 'hiud': 0}
+        self.n_effective = {'nsaid': 0, 'txa': 0, 'pill': 0, 'hiud': 0}
+
+        return
+
+    def step(self):
+        """Track treatment effectiveness at each timestep"""
+
+        # Find the HMB care pathway intervention
+        pathway = None
+        for intv in self.sim.interventions.values():
+            if hasattr(intv, 'treatment_map'):
+                pathway = intv
+                break
+
+        if pathway is None:
+            return
+
+        # Get UIDs of people who have been assessed
+        assessed_uids = pathway.treatment_assessed.uids
+
+        # For each treatment type, count new assessments
+        for tx_name, tx_idx in pathway.treatment_map.items():
+            if tx_name == 'none':
+                continue
+
+            # Filter for people on this specific treatment
+            on_this_tx = pathway.current_treatment[assessed_uids] == tx_idx
+            assessed_this_tx_uids = assessed_uids[on_this_tx]
+
+            # Only count UIDs we haven't counted yet
+            new_uids = [uid for uid in assessed_this_tx_uids if uid not in self.counted_uids[tx_name]]
+
+            if len(new_uids) > 0:
+                # Convert to numpy array for indexing
+                new_uids = np.array(new_uids)
+
+                # Add to counted set
+                self.counted_uids[tx_name].update(new_uids)
+
+                # Count assessments
+                self.n_assessed[tx_name] += len(new_uids)
+
+                # Count how many were effective
+                effective = pathway.treatment_effective[new_uids]
+                self.n_effective[tx_name] += np.count_nonzero(effective)
+
+        return
+
+    def get_efficacy(self, treatment):
+        """
+        Calculate actual efficacy rate for a treatment.
+
+        Args:
+            treatment: Treatment name ('nsaid', 'txa', 'pill', 'hiud')
+
+        Returns:
+            Efficacy rate (n_effective / n_assessed), or None if no assessments
+        """
+        if self.n_assessed[treatment] > 0:
+            return self.n_effective[treatment] / self.n_assessed[treatment]
+        else:
+            return None
+
+
 class track_care_seeking(ss.Analyzer):
     """
     Analyzer to track care-seeking prevalence stratified by anemia, pain, HMB status, and age.
