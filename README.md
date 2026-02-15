@@ -124,6 +124,46 @@ sim.run()
 sim.plot()
 ```
 
+### Using the care pathway intervention with analyzers
+
+```python
+import fpsim as fp
+from menstruation import Menstruation
+from education import Education
+from interventions import HMBCarePathway
+from analyzers import track_care_seeking, track_tx_eff, track_tx_dur
+
+# Create modules
+mens = Menstruation()
+edu = Education()
+
+# Create intervention and analyzers
+pathway = HMBCarePathway(
+    year=2020,
+    time_to_assess=3,  # months before assessing treatment effectiveness
+)
+care_analyzer = track_care_seeking()
+tx_eff_analyzer = track_tx_eff()
+tx_dur_analyzer = track_tx_dur()
+
+# Create and run simulation
+sim = fp.Sim(
+    start=2020,
+    stop=2030,
+    n_agents=5000,
+    location='kenya',
+    education_module=edu,
+    connectors=[mens],
+    interventions=[pathway],
+    analyzers=[care_analyzer, tx_eff_analyzer, tx_dur_analyzer],
+)
+sim.run()
+
+# Access analyzer results
+print(f"Treatment effectiveness: {tx_eff_analyzer.results}")
+print(f"Care-seeking rates: {care_analyzer.results}")
+```
+
 ### Running scenarios
 
 The package includes several example scripts:
@@ -136,15 +176,33 @@ The package includes several example scripts:
 ## Project structure
 
 - `menstruation.py` - Core HMB state module
-- `interventions.py` - Contraceptive and treatment interventions
+- `interventions.py` - Contraceptive and treatment interventions (HMBCarePathway)
 - `education.py` - Educational impact modeling
+- `analyzers.py` - Specialized analyzers for tracking care-seeking, treatment effectiveness, and durations
+- `utils.py` - Shared utility functions (logistic regression)
+- `tests/` - Comprehensive test suite
 - `data/` - Input data files
 - `figures/` - Output visualizations
 - `results_stochastic_extended/` - Saved simulation results
 
+## Testing
+
+The package includes a comprehensive test suite in `tests/test_hmb_interventions.py` that validates:
+
+- Care-seeking rates respond appropriately to anemia and pain
+- Treatment effectiveness matches configured efficacy parameters
+- Treatment durations follow expected distributions
+- Treatment cascade progresses correctly through the care pathway
+
+Run tests with:
+```bash
+cd tests
+pytest test_hmb_interventions.py -v
+```
+
 ## Version
 
-Current version: 0.1.0
+Current version: 0.3.0
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 
