@@ -815,18 +815,19 @@ class HMBCarePathway(ss.Intervention):
             """
             Assess treatment effectiveness after time_to_assess period (default: 3 months).
 
-            Treatment is considered effective if HMB status has resolved. The biological
-            effect is determined by hmb_pred coefficients in the menstruation module
-            (only responders receive this effect).
+            Treatment responder status determines the biological effect: responders have
+            their HMB suppressed, non-responders do not benefit.
 
             Process:
-            1. Find individuals on treatment who haven't been assessed yet
-            2. Check if time_to_assess has elapsed since treatment start
-            3. Check current HMB status
-            4. If HMB resolved: mark as effective, continue to adherence check
-            5. If HMB persists: mark as ineffective, schedule stop for next timestep
+            1. Apply treatment effects: remove HMB from responders currently on treatment
+            2. Find individuals on treatment who haven't been assessed yet
+            3. Check if time_to_assess has elapsed since treatment start
+            4. Check current HMB status
+            5. If HMB resolved: mark as effective, continue to adherence check
+            6. If HMB persists: mark as ineffective, schedule stop for next timestep
 
             Updates:
+                menstruation.hmb: Set to False for treatment responders
                 treatment_assessed: Marks individuals as assessed
                 treatment_effective: True if HMB resolved, False otherwise
                 ti_stop_treatment: Set to ti+1 for ineffective treatments
@@ -834,28 +835,51 @@ class HMBCarePathway(ss.Intervention):
             Note: Failed treatments are automatically stopped at the next timestep,
             allowing individuals to try the next option in the cascade.
             """
-            
+
+            # Apply treatment effects: remove HMB from responders currently on treatment
+            mens = self.sim.people.menstruation
+
+            # NSAID responders
+            on_nsaid = self.current_treatment == self.treatment_map['nsaid']
+            nsaid_responders = on_nsaid & self.nsaid_responder
+            mens.hmb[nsaid_responders.uids] = False
+
+            # TXA responders
+            on_txa = self.current_treatment == self.treatment_map['txa']
+            txa_responders = on_txa & self.txa_responder
+            mens.hmb[txa_responders.uids] = False
+
+            # Pill responders
+            on_pill = self.current_treatment == self.treatment_map['pill']
+            pill_responders = on_pill & self.pill_responder
+            mens.hmb[pill_responders.uids] = False
+
+            # hIUD responders
+            on_hiud = self.current_treatment == self.treatment_map['hiud']
+            hiud_responders = on_hiud & self.hiud_responder
+            mens.hmb[hiud_responders.uids] = False
+
             # Find those ready to assess
             on_treatment_uids = (self.on_treatment & ~self.treatment_assessed).uids
-        
+
             if len(on_treatment_uids) == 0:
                 return
-        
+
             # Check if enough time has passed to assess them
             time_on_treatment = self.ti - self.ti_start_treatment[on_treatment_uids]
             ready_to_assess = on_treatment_uids[time_on_treatment >= self.pars.time_to_assess]
             self.treatment_assessed[ready_to_assess] = True
-        
+
             if len(ready_to_assess) == 0:
                 return
 
             # Assess whether treatment has helped HMB
-            has_hmb = ready_to_assess & self.sim.people.menstruation.hmb
-            no_hmb = ready_to_assess & ~self.sim.people.menstruation.hmb
+            has_hmb = ready_to_assess & mens.hmb
+            no_hmb = ready_to_assess & ~mens.hmb
             self.treatment_effective[no_hmb] = True
             self.treatment_effective[has_hmb] = False
             self.ti_stop_treatment[has_hmb] = self.ti + 1  # Stop next time step
-                
+
             return
     
         def check_adherence(self, uids=None):

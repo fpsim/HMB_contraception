@@ -214,7 +214,9 @@ class Menstruation(ss.Connector):
         HMB is determined by:
         1. Base probability (for hmb_prone individuals)
         2. Age-specific odds ratios
-        3. Treatment responder status (applied after probability calculation)
+
+        Note: Treatment effects are applied by HMBCarePathway intervention,
+        which removes HMB from treatment responders.
         """
         # Calculate the probability of HMB based on base odds and age
         intercept = -np.log(1/self.pars.hmb_pred.base-1)
@@ -242,37 +244,6 @@ class Menstruation(ss.Connector):
         has_hmb = self._p_hmb.filter(uids)
         # set hmb among those uids filtered above
         self.hmb[has_hmb] = True
-
-        # Apply treatment responder logic to remove HMB from responders
-        # Find the HMB care pathway intervention
-        pathway = None
-        if hasattr(self.sim, 'interventions'):
-            for intv in self.sim.interventions.values():
-                if hasattr(intv, 'treatment_map'):
-                    pathway = intv
-                    break
-
-        if pathway is not None:
-            # For each treatment, remove HMB from responders currently on that treatment
-            # NSAID
-            on_nsaid = pathway.current_treatment == pathway.treatment_map['nsaid']
-            nsaid_responders = on_nsaid & pathway.nsaid_responder
-            self.hmb[nsaid_responders.uids] = False
-
-            # TXA
-            on_txa = pathway.current_treatment == pathway.treatment_map['txa']
-            txa_responders = on_txa & pathway.txa_responder
-            self.hmb[txa_responders.uids] = False
-
-            # Pill
-            on_pill = pathway.current_treatment == pathway.treatment_map['pill']
-            pill_responders = on_pill & pathway.pill_responder
-            self.hmb[pill_responders.uids] = False
-
-            # hIUD
-            on_hiud = pathway.current_treatment == pathway.treatment_map['hiud']
-            hiud_responders = on_hiud & pathway.hiud_responder
-            self.hmb[hiud_responders.uids] = False
 
         return
 
