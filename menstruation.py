@@ -125,7 +125,6 @@ class Menstruation(ss.Connector):
 
         return
 
-
     def init_results(self):
         """ Initialize results """
         super().init_results()
@@ -137,11 +136,10 @@ class Menstruation(ss.Connector):
             ss.Result('hyst_prev', scale=False, label="Prevalence of hysterectomy"),
             ss.Result('early_meno_prev', scale=False, label="Early menopause prevalence"),
             ss.Result('premature_meno_prev', scale=False, label="Premature menopause prevalence"),
-            ss.Result('n_anemia', scale=False, label="Cumulative anemia cases"),
+            ss.Result('n_anemia', scale=True, label="Cumulative anemia cases"),
         ]
         self.define_results(*results)
         return
-    
     
     # property: less than 40 years old
     @property
@@ -156,7 +154,6 @@ class Menstruation(ss.Connector):
         within_age = people.age < float(upper_age)
         
         return (within_age & people.female).uids
-
 
     def set_mens_states(self, upper_age=None):
         """ Set menstrual states """
