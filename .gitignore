@@ -5,6 +5,7 @@
 # Simulation outputs
 results_extended/
 results_stochastic_extended/
+figures/
 figures_extended/
 figures_stochastic_extended/
 results/
