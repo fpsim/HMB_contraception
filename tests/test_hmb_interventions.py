@@ -296,14 +296,95 @@ def test_tx_dur(sim):
 # Treatment cascade progresses correctly
 # ============================================================================
 
-def test_cascade_stage_progression(intervention_sim):
+def test_cascade_stage_progression(sim):
     """
     Test that women progress through cascade stages in correct order
 
     Expected behavior:
     - Women should move through stages: NSAID → TXA → pill → IUD
-    - No stage should be skipped
+    - No stage should be skipped (for those who try multiple treatments)
+    - Later treatments should only be tried after earlier ones
     """
+    import numpy as np
+
+    pathway = sim.interventions.hmb_care_pathway
+
+    # Get all women who tried any treatment
+    tried_any = (pathway.tried_nsaid | pathway.tried_txa |
+                 pathway.tried_pill | pathway.tried_hiud).uids
+
+    if len(tried_any) == 0:
+        print("  WARNING: No women tried any treatment - skipping test")
+        return
+
+    print(f"\n  Total women who tried at least one treatment: {len(tried_any)}")
+
+    # Get treatment history for each person
+    tried_nsaid = pathway.tried_nsaid[tried_any]
+    tried_txa = pathway.tried_txa[tried_any]
+    tried_pill = pathway.tried_pill[tried_any]
+    tried_hiud = pathway.tried_hiud[tried_any]
+
+    # Count how many treatments each woman tried
+    n_treatments = (tried_nsaid.astype(int) + tried_txa.astype(int) +
+                    tried_pill.astype(int) + tried_hiud.astype(int))
+
+    print(f"\n  Treatment history distribution:")
+    for n in range(1, 5):
+        count = np.sum(n_treatments == n)
+        pct = count / len(tried_any) * 100
+        print(f"    Tried {n} treatment(s): {count} ({pct:.1f}%)")
+
+    # Test cascade ordering rules:
+    # Rule 1: If tried TXA, must have tried NSAID
+    tried_txa_uids = tried_any[tried_txa]
+    if len(tried_txa_uids) > 0:
+        should_have_nsaid = tried_nsaid[tried_txa]
+        n_violations = np.sum(~should_have_nsaid)
+        print(f"\n  Rule 1: TXA requires NSAID first")
+        print(f"    Women who tried TXA: {len(tried_txa_uids)}")
+        print(f"    Violations (tried TXA without NSAID): {n_violations}")
+        assert n_violations == 0, f"Found {n_violations} women who tried TXA without trying NSAID first"
+
+    # Rule 2: If tried pill, must have tried NSAID and TXA
+    tried_pill_uids = tried_any[tried_pill]
+    if len(tried_pill_uids) > 0:
+        should_have_nsaid = tried_nsaid[tried_pill]
+        should_have_txa = tried_txa[tried_pill]
+        n_violations_nsaid = np.sum(~should_have_nsaid)
+        n_violations_txa = np.sum(~should_have_txa)
+        print(f"\n  Rule 2: Pill requires NSAID and TXA first")
+        print(f"    Women who tried pill: {len(tried_pill_uids)}")
+        print(f"    Violations (tried pill without NSAID): {n_violations_nsaid}")
+        print(f"    Violations (tried pill without TXA): {n_violations_txa}")
+        assert n_violations_nsaid == 0, f"Found {n_violations_nsaid} women who tried pill without trying NSAID first"
+        assert n_violations_txa == 0, f"Found {n_violations_txa} women who tried pill without trying TXA first"
+
+    # Rule 3: If tried hIUD, must have tried NSAID, TXA, and pill
+    tried_hiud_uids = tried_any[tried_hiud]
+    if len(tried_hiud_uids) > 0:
+        should_have_nsaid = tried_nsaid[tried_hiud]
+        should_have_txa = tried_txa[tried_hiud]
+        should_have_pill = tried_pill[tried_hiud]
+        n_violations_nsaid = np.sum(~should_have_nsaid)
+        n_violations_txa = np.sum(~should_have_txa)
+        n_violations_pill = np.sum(~should_have_pill)
+        print(f"\n  Rule 3: hIUD requires NSAID, TXA, and pill first")
+        print(f"    Women who tried hIUD: {len(tried_hiud_uids)}")
+        print(f"    Violations (tried hIUD without NSAID): {n_violations_nsaid}")
+        print(f"    Violations (tried hIUD without TXA): {n_violations_txa}")
+        print(f"    Violations (tried hIUD without pill): {n_violations_pill}")
+        assert n_violations_nsaid == 0, f"Found {n_violations_nsaid} women who tried hIUD without trying NSAID first"
+        assert n_violations_txa == 0, f"Found {n_violations_txa} women who tried hIUD without trying TXA first"
+        assert n_violations_pill == 0, f"Found {n_violations_pill} women who tried hIUD without trying pill first"
+
+    # Summary statistics
+    print(f"\n  Cascade progression summary:")
+    print(f"    Started at NSAID: {np.sum(tried_nsaid)} ({np.sum(tried_nsaid)/len(tried_any)*100:.1f}%)")
+    print(f"    Progressed to TXA: {np.sum(tried_txa)} ({np.sum(tried_txa)/len(tried_any)*100:.1f}%)")
+    print(f"    Progressed to pill: {np.sum(tried_pill)} ({np.sum(tried_pill)/len(tried_any)*100:.1f}%)")
+    print(f"    Progressed to hIUD: {np.sum(tried_hiud)} ({np.sum(tried_hiud)/len(tried_any)*100:.1f}%)")
+
     return
 
 
@@ -317,11 +398,58 @@ def test_tx_hmb(sim_base, sim_intv):
 
     Expected behavior:
     - HMB prevalence should be lower with intervention than without
+    - Difference should be statistically meaningful (>5% reduction)
     """
-    # TODO: Implement test
-    # 1. Run both baseline and intervention simulations
-    # 2. Compare final HMB prevalence
-    # 3. Assert intervention reduces HMB
+    import numpy as np
+
+    # Get HMB prevalence from menstruation module results
+    mens_base = sim_base.people.menstruation
+    mens_intv = sim_intv.people.menstruation
+
+    # Calculate mean HMB prevalence over the intervention period
+    # Start from year 1 (after intervention starts in 2020) to allow system to stabilize
+    start_idx = 12  # Start after 1 year (12 months)
+
+    # Get HMB prevalence time series
+    hmb_prev_base = mens_base.results.hmb_prev[start_idx:]
+    hmb_prev_intv = mens_intv.results.hmb_prev[start_idx:]
+
+    # Calculate mean prevalence
+    mean_base = np.mean(hmb_prev_base)
+    mean_intv = np.mean(hmb_prev_intv)
+
+    # Calculate absolute and relative reduction
+    abs_reduction = mean_base - mean_intv
+    rel_reduction = abs_reduction / mean_base if mean_base > 0 else 0
+
+    print(f'\n  Baseline HMB prevalence:     {mean_base:.3f} ({mean_base*100:.1f}%)')
+    print(f'  Intervention HMB prevalence: {mean_intv:.3f} ({mean_intv*100:.1f}%)')
+    print(f'  Absolute reduction:          {abs_reduction:.3f} ({abs_reduction*100:.1f} percentage points)')
+    print(f'  Relative reduction:          {rel_reduction:.1%}')
+
+    # Test 1: Intervention should reduce HMB prevalence
+    assert mean_intv < mean_base, \
+        f"Intervention should reduce HMB prevalence, but baseline={mean_base:.3f} and intervention={mean_intv:.3f}"
+    print(f'  ✓ Passed: Intervention reduces HMB prevalence')
+
+    # Test 2: Reduction should be meaningful (at least 5% relative reduction)
+    min_reduction = 0.05  # 5% relative reduction
+    assert rel_reduction >= min_reduction, \
+        f"Reduction should be at least {min_reduction:.0%}, but was only {rel_reduction:.1%}"
+    print(f'  ✓ Passed: Reduction is meaningful (≥{min_reduction:.0%})')
+
+    # Test 3: Check that reduction is consistent over time (not just noise)
+    # Compare prevalence in final year for both sims
+    final_year_base = np.mean(hmb_prev_base[-12:])  # Last 12 months
+    final_year_intv = np.mean(hmb_prev_intv[-12:])  # Last 12 months
+
+    print(f'\n  Final year baseline:     {final_year_base:.3f}')
+    print(f'  Final year intervention: {final_year_intv:.3f}')
+
+    assert final_year_intv < final_year_base, \
+        "Intervention effect should persist in final year"
+    print(f'  ✓ Passed: Effect persists in final year')
+
     return
 
 
@@ -354,15 +482,13 @@ if __name__ == '__main__':
     test_tx_dur(sim_intv)
     print('✓ Passed\n')
 
-    # print('Test 4: Treatment cascade progresses correctly')
-    # test_cascade_stage_progression(sim_intv)
-    # print('✓ Passed\n')
+    print('Test 4: Treatment cascade progresses correctly')
+    test_cascade_stage_progression(sim_intv)
+    print('✓ Passed\n')
 
-    # print('Test 5: Intervention reduces HMB prevalence')
-    # test_tx_hmb(sim_base, sim_intv)
-    # print('✓ Passed\n')
+    print('Test 5: Intervention reduces HMB prevalence')
+    test_tx_hmb(sim_base, sim_intv)
+    print('✓ Passed\n')
 
-    # print('='*80)
-    # print('All tests passed!')
-    # print('='*80)
+    sc.heading('All tests passed!')
 
