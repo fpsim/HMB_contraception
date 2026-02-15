@@ -96,6 +96,107 @@ class track_tx_eff(ss.Analyzer):
             return None
 
 
+class track_hmb_anemia(ss.Analyzer):
+    """
+    Analyzer to track the relationship between HMB and anemia among menstruating non-pregnant women.
+
+    Tracks:
+    - Anemia cases among women with/without HMB
+    - HMB cases among women with/without anemia
+    - Prevalence rates for all combinations
+
+    This analyzer requires:
+    - sim.people.menstruation with states: anemic, hmb, menstruating
+    - sim.people.fp with state: pregnant (from FPsim)
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        return
+
+    def init_results(self):
+        """Initialize results storage"""
+        super().init_results()
+
+        # Define all results
+        results = [
+            # Counts
+            ss.Result('n_anemia_with_hmb', scale=True, label="Anemia cases among women with HMB"),
+            ss.Result('n_anemia_without_hmb', scale=True, label="Anemia cases among women without HMB"),
+            ss.Result('n_hmb_with_anemia', scale=True, label="HMB cases with anemia"),
+            ss.Result('n_hmb_without_anemia', scale=True, label="HMB cases without anemia"),
+
+            # Prevalence rates
+            ss.Result('prev_anemia_in_hmb', scale=False, label="Prevalence of anemia among women with HMB"),
+            ss.Result('prev_anemia_in_no_hmb', scale=False, label="Prevalence of anemia among women without HMB"),
+            ss.Result('prev_hmb_in_anemia', scale=False, label="Prevalence of HMB among women with anemia"),
+            ss.Result('prev_hmb_in_no_anemia', scale=False, label="Prevalence of HMB among women without anemia"),
+
+            # Overall population counts
+            ss.Result('n_menstruating_nonpreg', scale=True, label="Menstruating non-pregnant women"),
+            ss.Result('n_hmb_total', scale=True, label="Total HMB cases"),
+            ss.Result('n_anemia_total', scale=True, label="Total anemia cases"),
+        ]
+
+        self.define_results(*results)
+        return
+
+    def step(self):
+        """Calculate HMB-anemia relationships at this timestep"""
+        sim = self.sim
+        ti = self.ti
+
+        # Get menstruation module
+        menstruation = sim.people.menstruation
+
+        # Get states
+        menstruating = menstruation.menstruating
+        hmb = menstruation.hmb
+        anemic = menstruation.anemic
+
+        # Get pregnancy status from FPsim
+        pregnant = sim.people.fp.pregnant if hasattr(sim.people, 'fp') else np.zeros(len(sim.people), dtype=bool)
+
+        # Define eligible population: menstruating non-pregnant women
+        eligible = menstruating & ~pregnant
+
+        # Helper function to calculate prevalence safely
+        def calc_prev(condition, population):
+            """Calculate prevalence, returning 0 if population is empty"""
+            n_pop = np.count_nonzero(population)
+            if n_pop > 0:
+                return np.count_nonzero(condition & population) / n_pop
+            else:
+                return 0.0
+
+        # Overall population counts
+        self.results.n_menstruating_nonpreg[ti] = np.count_nonzero(eligible)
+        self.results.n_hmb_total[ti] = np.count_nonzero(hmb & eligible)
+        self.results.n_anemia_total[ti] = np.count_nonzero(anemic & eligible)
+
+        # Anemia stratified by HMB status
+        hmb_eligible = hmb & eligible
+        no_hmb_eligible = ~hmb & eligible
+
+        self.results.n_anemia_with_hmb[ti] = np.count_nonzero(anemic & hmb_eligible)
+        self.results.n_anemia_without_hmb[ti] = np.count_nonzero(anemic & no_hmb_eligible)
+
+        self.results.prev_anemia_in_hmb[ti] = calc_prev(anemic, hmb_eligible)
+        self.results.prev_anemia_in_no_hmb[ti] = calc_prev(anemic, no_hmb_eligible)
+
+        # HMB stratified by anemia status
+        anemic_eligible = anemic & eligible
+        no_anemic_eligible = ~anemic & eligible
+
+        self.results.n_hmb_with_anemia[ti] = np.count_nonzero(hmb & anemic_eligible)
+        self.results.n_hmb_without_anemia[ti] = np.count_nonzero(hmb & no_anemic_eligible)
+
+        self.results.prev_hmb_in_anemia[ti] = calc_prev(hmb, anemic_eligible)
+        self.results.prev_hmb_in_no_anemia[ti] = calc_prev(hmb, no_anemic_eligible)
+
+        return
+
+
 class track_tx_dur(ss.Analyzer):
     """
     Track treatment durations for each treatment type.
