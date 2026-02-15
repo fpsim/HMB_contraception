@@ -48,18 +48,35 @@ class Menstruation(ss.Connector):
             # determines whether each woman is a hormonal or non-hormonal IUD user
             p_hiud=ss.bernoulli(p=0.17),
 
-            # --- HMB prediction
-            # Proportion of menstruating women who experience HMB (sans interventions)
-            p_hmb_prone=ss.bernoulli(p=0.486),  
+            # HMB prediction
+            # TODO: consider replacing this binary variable (HMB yes/no) with a continuous one representing blood loss
+            p_hmb_prone=ss.bernoulli(p=0.486),  # Proportion of menstruating women who experience HMB (sans interventions)
             
-            
+            # Odds ratios to create an age curve (currently calculated from Tanzania (Ibrihim 2023)) ---
+            hmb_age_OR = {
+            "15-19": 3.85, # 1/0.26=3.85
+            "20-44": 0.62, # from Tanzania study, with reference group of "15-19", OR for 20-44 is 0.16; 0.16/0.26=0.62
+            "45-59": 1.00, # from Tanzania study, with reference group of "15-19", OR for 45-59 is 0.26; 
+            },
+
             hmb_pred=sc.objdict(  # Parameters for HMB prediction
                 # Baseline odds that those prone to HMB will experience it this timestep
                 # This is converted to an intercept in the logistic regression: -np.log(1/base-1)
-                base=0.95,
-                pill = -np.log(1/((1 - 0.25*0.312) * 0.95) -1) - np.log(1/0.95 -1),
-                hiud = -np.log(1/((1-0.312) * 0.95) -1) - np.log(1/0.95 -1),
-                txa = -np.log(1/((1 - 0.5*0.312) * 0.95) -1) - np.log(1/0.95 -1),
+                base=0.995,
+                # Effect of hormonal pill on HMB - placeholder.
+                # Interpretation: baseline odds without pill is 0.5
+                # Odds with pill is 1/(1+exp(-(0-3)))=0.047, i.e. reduces odds by ~90%
+                pill=-3,
+                # Effect of IUD on HMB - placeholder
+                # Interpretation: baseline odds without pill is 1/(1+exp(-(0)))=0.5
+                # Odds with IUD is 1/(1+exp(-(0-10)))=0.000045, i.e. reduces odds by ~99%
+                hiud=-10,
+                # Effect of tranexamic acid on HMB - placeholder
+                # Odds with TX is 1/(1+exp(-(0-2)))=0.119, i.e. reduces odds by ~76%
+                txa=-2,
+                # Effect of NSAIDs on HMB - placeholder
+                # Assume about half as effective as TXA, so 1/(1+exp(-(0-1))) = 0.269
+                nsaid=-1
             ),
 
             # Non-permanent sequelae of HMB
@@ -117,6 +134,7 @@ class Menstruation(ss.Connector):
 
             # HMB sequelae
             ss.BoolState('anemic'),
+            ss.BoolState('prev_anemic', default=False),
             ss.BoolState('poor_mh', label="Poor menstrual hygiene"),
             ss.BoolState('pain', label="Menstrual pain"),
             ss.BoolState('hyst', label="Hysterectomy"),
@@ -135,7 +153,10 @@ class Menstruation(ss.Connector):
             ss.BoolState('pill', label="Using hormonal pill"),
             ss.BoolState('hiud', label="Using hormonal IUD"),
             ss.BoolState('txa', label="Using tranexamic acid"),
+            ss.BoolState('nsaid', label="Using NSAIDs"),
             ss.BoolState('hiud_prone', label="Prone to use hormonal IUD, if using IUD"),
+            
+
         )
 
         return
@@ -154,6 +175,7 @@ class Menstruation(ss.Connector):
             ss.Result('pill_prev', scale=False, label="Prevalence of pill usage"),
             ss.Result('early_meno_prev', scale=False, label="Early menopause prevalence"),
             ss.Result('premature_meno_prev', scale=False, label="Premature menopause prevalence"),
+            ss.Result('n_anemia', scale=False, label="Cumulative anemia cases"),
         ]
         self.define_results(*results)
         return
@@ -193,6 +215,11 @@ class Menstruation(ss.Connector):
         # Set initial menstrual states
         self.set_mens_states()
         self.set_hmb(self.hmb_sus.uids)
+        
+        # Initialize tracking for cumulative anemia cases
+        self._annual_anemia_cases = 0  
+        self._last_year_anemia = self.sim.t.year  
+
 
         return
 
@@ -214,7 +241,29 @@ class Menstruation(ss.Connector):
     def set_hmb(self, uids):
         """ Set who will experience heavy menstrual bleeding (HMB) """
         # Calculate the probability of HMB (based on interventions)
-        p_hmb = self._logistic(uids, self.pars.hmb_pred)
+
+        intercept = -np.log(1/self.pars.hmb_pred.base-1)
+        rhs = np.full_like(uids, fill_value=intercept, dtype=float)
+        
+        # Add intervention effects
+        for term, val in self.pars.hmb_pred.items():
+               if term != 'base':
+                    rhs += val * getattr(self, term)[uids]
+        # Apply age-specific odds ratios
+        ages = self.sim.people.age[uids]
+        age_adjustments = np.zeros_like(uids, dtype=float)
+        # Create age masks
+        age_15_19 = (ages >= 15) & (ages < 20)
+        age_20_44 = (ages >= 20) & (ages < 45)
+        age_45_plus = ages >= 45
+        # Apply log(OR) for each age group
+        age_adjustments[age_15_19] = np.log(self.pars.hmb_age_OR["15-19"])
+        age_adjustments[age_20_44] = np.log(self.pars.hmb_age_OR["20-44"])
+        age_adjustments[age_45_plus] = np.log(self.pars.hmb_age_OR["45-59"])
+        rhs += age_adjustments
+        # Calculate the probability
+        p_hmb = 1 / (1+np.exp(-rhs))
+
         self._p_hmb.set(0)
         self._p_hmb.set(p_hmb)
         # filter returns True if p_hmb > 0.5
@@ -285,7 +334,7 @@ class Menstruation(ss.Connector):
         self.menopausal[:] = f & (ppl.age > self.age_menopause)
         self.early_meno[:] = self.menopausal & (self.age_menopause < 45)
         self.premature_meno[:] = self.menopausal & (self.age_menopause < 40)
-        self.hmb_sus[:] = self.menstruating & self.hmb_prone & ~self.hmb
+        self.hmb_sus[:] = self.menstruating & self.hmb_prone & ~self.hmb & ~self.sim.people.fp.pregnant
 
         # Contraceptive methods
         pill_idx = cm.get_method_by_label('Pill').idx
@@ -305,6 +354,22 @@ class Menstruation(ss.Connector):
             self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.menstruating)
         for res in ['hyst', 'early_meno', 'premature_meno']:
             self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.post_menarche)
+            
+        # --- cumulative anemia cases per year ---
+        mens = self.menstruating
+        new_cases = (~self.prev_anemic) & self.anemic & mens
+        current_new_cases = np.count_nonzero(new_cases)
+
+        current_year = self.sim.t.year
+        if current_year != self._last_year_anemia:
+            self._annual_anemia_cases = current_new_cases
+            self._last_year_anemia = current_year
+        else:
+            self._annual_anemia_cases += current_new_cases
+
+        self.results.n_anemia[ti] = self._annual_anemia_cases
+        self.prev_anemic[:] = self.anemic[:]
+
         return
 
 

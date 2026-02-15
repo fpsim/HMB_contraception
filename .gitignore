@@ -1,3 +1,34 @@
+# Project-specific simulation files
+*.sim
+*.obj
+
+# Simulation outputs
+results_extended/
+results_stochastic_extended/
+figures_extended/
+figures_stochastic_extended/
+results/
+files/
+
+# Test and archive directories
+tests/figs/*
+tests/devtests/figs/*
+figs/*
+archive/
+
+# Starsim-generated files
+fonts_installed_successfully
+
+# Quarto-generated files
+.jupyter_cache/
+.virtual_documents/
+docs/_site/
+docs/_extensions/
+docs/_inv/
+docs/api/
+objects.json
+objects.txt
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -62,6 +93,7 @@ db.sqlite3-journal
 # Flask stuff:
 instance/
 .webassets-cache
+*.out
 
 # Scrapy stuff:
 .scrapy
@@ -123,6 +155,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Node.js and NPM
+node_modules/
+
 # IDE settings
 .vscode/
 .idea/
@@ -139,13 +174,17 @@ dmypy.json
 ehthumbs.db
 Thumbs.db
 
-# Project-specific
+# Project-specific output files
 *.pkl
 *.pickle
-results/
 *.png
 *.jpg
 *.pdf
+
+# Allow figures in specific directories
 !figures/*.png
 !figures/*.jpg
 !figures/*.pdf
+!figures_extended/*.png
+!figures_extended/*.jpg
+!figures_extended/*.pdf

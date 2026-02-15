@@ -41,15 +41,27 @@ class Education(ss.Module):
                 age_15_19=1.1,  # Adjustment for ages 15-19
                 age_20_24=-2,  # Adjustment for ages 20 and older
                 parity=1.,  # Adjustment for parity
-                # poor_mh=1.25,
-                # perceived_hmb=1.5  # Adjustment for HMB (encompasses both biomedical & perceived)
             ),
             init_dropout=ss.bernoulli(p=0.5),  # Initial dropout probability
+            disrupt_pars=sc.objdict(  # Parameters for determining disruption probabilities
+                    base=0.05,        # Baseline disruption when no HMB
+                    hmb=2.6,          # Strong effect of HMB on disruption hmb = np.log(0.1/(1-p1)) - np.log(base/(1-base))
+                    hiud=-1.0,        # Effect of hormonal IUD - reduces disruption
+                    pill=-1.0,        # Effect of pill - reduces disruption
+                    txa=-0.8,         # Effect of TXA - reduces disruption
+                    nsaid=-0.5,       # Effect of NSAID - reduces disruption
+                    ),
+            init_disrupt=ss.bernoulli(p=0.5), # Initial disruption probability
+            redcued_attainment = 0.5, #Reduced attainment for disrupted students
         )
         self.update_pars(pars, **kwargs)
 
         # Probabilities of dropping out - calculated using data inputs
         self._p_dropout = ss.bernoulli(p=0)
+
+        # Probabilities of disruption of schooling
+        self._p_disrupt = ss.bernoulli(p=0)
+
 
         # Define states
         self.define_states(
@@ -59,6 +71,8 @@ class Education(ss.Module):
             ss.BoolState('in_school'),  # Currently in school
             ss.BoolState('completed'),  # Whether education is completed
             ss.BoolState('dropped'),  # Whether education was dropped
+            ss.BoolState('disrupted'), # Whether schooling was disrupted for partial timestep
+            ss.FloatArr('n_disruptions', default=0), 
         )
 
         # Store things that will be processed after sim initialization
@@ -156,6 +170,8 @@ class Education(ss.Module):
             ss.Result('prop_completed', label='AGYW: proportion completed education', scale=False),
             ss.Result('prop_in_school', label='AGYW: proportion in school', scale=False),
             ss.Result('prop_dropped', label='AGYW: proportion dropped', scale=False),
+            ss.Result('prop_disrupted', label='AGYW: proportion disrupted this timestep', scale=False),
+            ss.Result('n_disruptions', label='AGYW: cumulative disruptions', scale=False),
         ]
         self.define_results(*results)
         return
@@ -168,6 +184,7 @@ class Education(ss.Module):
 
     def step(self):
         self.start_education()  # Start school
+        self.process_disruptions() ## school disruption 
         self.advance_education()  # Advance attainment, determine who reaches their objective, process dropouts
         self.process_dropouts()  # Process dropouts
         self.graduate()  # Check if anyone achieves their education goal
@@ -186,12 +203,63 @@ class Education(ss.Module):
         self.started[new_students] = True  # Track who started education
         return
 
+    def process_disruptions(self):
+        """
+        Process schooling disruptions based on HMB status with probability.
+        Students with HMB have a probability of experiencing disruption each timestep.
+        """
+        # Reset disruption status for this timestep
+        self.disrupted[:] = False
+        
+        # Get the uids of individuals currently in school & menstruating
+        uids = (self.in_school & self.sim.people.menstruation.menstruating).uids
+        
+        if len(uids) == 0:
+            return
+    
+        
+        p = self.pars.disrupt_pars
+        rhs = np.full_like(uids, fill_value=-np.log(1 / p.base - 1), dtype=float)
+    
+        # Add covariates 
+        for term, val in p.items():
+            if term != 'base':
+                # For HMB, use local property
+                if term == 'hmb':
+                    rhs += val * getattr(self, term)[uids]
+                # For interventions (hiud, pill, txa, nsaid), get from menstruation module
+                else:
+                    if hasattr(self.sim.connectors, 'menstruation') and hasattr(self.sim.connectors.menstruation, term):
+                        rhs += val * getattr(self.sim.connectors.menstruation, term)[uids]
+    
+        # Calculate probability - monthly 
+        p_val =  (1 / (1 + np.exp(-rhs)))
+    
+        # Apply probability filter
+        self._p_disrupt.set(p_val)
+        is_disrupted = self._p_disrupt.filter(uids)
+    
+        # Set disruption status (but keep them in_school)
+        self.disrupted[is_disrupted] = True
+        self.n_disruptions[is_disrupted] += 1 #
+        
+        return
+    
     def advance_education(self):
         """
         Increment education attainment
+        Students who are disrupted this month have reduced attainment
         """
         students = self.in_school
-        self.attainment[students] += self.t.dt_year
+        
+        # Full attainment for non-disrupted students
+        not_disrupted = students & ~self.disrupted
+        self.attainment[not_disrupted] += self.t.dt_year
+        
+        # Reduced attainment for disrupted students (e.g., 50% of normal)
+        disrupted = students & self.disrupted
+        self.attainment[disrupted] += self.pars.redcued_attainment * self.t.dt_year
+
         return
 
     def process_dropouts(self):
@@ -228,4 +296,34 @@ class Education(ss.Module):
         self.results.prop_completed[self.ti] = np.count_nonzero(self.completed[agyw]) / len(self.completed[agyw])
         self.results.prop_in_school[self.ti] = np.count_nonzero(self.in_school[agyw]) / len(self.in_school[agyw])
         self.results.prop_dropped[self.ti] = np.count_nonzero(self.dropped[agyw]) / len(self.dropped[agyw])
+        
+        # HMB disruption results
+        agyw_in_school_menstruating = agyw & self.in_school & ppl.menstruation.menstruating
+        
+        if np.any(agyw_in_school_menstruating):
+            self.results.prop_disrupted[self.ti] = np.count_nonzero(self.disrupted[agyw_in_school_menstruating]) / np.count_nonzero(agyw_in_school_menstruating)
+        else:
+            self.results.prop_disrupted[self.ti] = 0
+
+        # Annual disruptions - reset at start of each year
+        # Initialize accumulator at start of simulation
+        if self.ti == 0:
+            self._annual_disruptions = 0
+            self._last_year = self.sim.t.year
+    
+        # Count disruptions this timestep
+        current_disruptions = np.count_nonzero(self.disrupted[agyw])
+    
+        # Check if we've moved to a new year
+        current_year = self.sim.t.now().year
+        if current_year != self._last_year:
+            # New year - reset the counter
+            self._annual_disruptions = current_disruptions
+            self._last_year = current_year
+        else:
+            # Same year - accumulate
+            self._annual_disruptions += current_disruptions
+
+        self.results.n_disruptions[self.ti] = current_disruptions
+
         return
