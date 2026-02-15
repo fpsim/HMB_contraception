@@ -55,7 +55,7 @@ class Menstruation(ss.Connector):
             },
 
             hmb_pred=sc.objdict(  # Parameters for HMB prediction
-                # Baseline odds that those prone to HMB will experience it this timestep
+                # Baseline probability that those prone to HMB will experience it at any point in time.
                 # This is converted to an intercept in the logistic regression: -np.log(1/base-1)
                 # Treatment effects are now handled via responder status in HMBCarePathway intervention
                 base=0.995,
@@ -121,13 +121,6 @@ class Menstruation(ss.Connector):
             ss.BoolState('premature_meno'),
             ss.FloatArr('age_menses', label="Age of menarche"),
             ss.FloatArr('age_menopause', label="Age of menopause"),
-
-            # # Contraceptive methods and other HMB prevention methods
-            # ss.BoolState('pill', label="Using hormonal pill"),
-            # ss.BoolState('hiud', label="Using hormonal IUD"),
-            # ss.BoolState('txa', label="Using tranexamic acid"),
-            # ss.BoolState('nsaid', label="Using NSAIDs"),
-            
         )
 
         return
@@ -142,8 +135,6 @@ class Menstruation(ss.Connector):
             ss.Result('anemic_prev', scale=False, label="Prevalence of anemia"),
             ss.Result('pain_prev', scale=False, label="Prevalence of menstrual pain"),
             ss.Result('hyst_prev', scale=False, label="Prevalence of hysterectomy"),
-            ss.Result('hiud_prev', scale=False, label="Prevalence of hIUD usage"),
-            ss.Result('pill_prev', scale=False, label="Prevalence of pill usage"),
             ss.Result('early_meno_prev', scale=False, label="Early menopause prevalence"),
             ss.Result('premature_meno_prev', scale=False, label="Premature menopause prevalence"),
             ss.Result('n_anemia', scale=False, label="Cumulative anemia cases"),
@@ -201,7 +192,8 @@ class Menstruation(ss.Connector):
         Note: Treatment effects are applied by HMBCarePathway intervention,
         which removes HMB from treatment responders.
         """
-        # Calculate the probability of HMB based on base odds and age
+        # Calculate the probability of HMB based on base probability and age
+        # Note: Despite comment on line 58, the parameter is treated as probability here
         intercept = -np.log(1/self.pars.hmb_pred.base-1)
         rhs = np.full_like(uids, fill_value=intercept, dtype=float)
 
@@ -223,23 +215,26 @@ class Menstruation(ss.Connector):
 
         self._p_hmb.set(0)
         self._p_hmb.set(p_hmb)
-        # filter returns True if p_hmb > 0.5
+        # filter draws Bernoulli random variables to determine who gets HMB
         has_hmb = self._p_hmb.filter(uids)
         # set hmb among those uids filtered above
         self.hmb[has_hmb] = True
 
         return
 
-
     def step(self):
         """ Updates for this timestep """
-                
+
         # Set menstruating states
         self.set_mens_states(upper_age=self.t.dt)  # for new agents
         self.step_states()  # for existing agents
 
         mens_uids = self.menstruating.uids
         self.hmb[:] = False  # Reset
+
+        # Recalculate hmb_sus to ensure it reflects current state before setting HMB
+        # (other modules may have updated pregnancy status since step_states was called)
+        self.hmb_sus[:] = self.menstruating & self.hmb_prone & ~self.sim.people.fp.pregnant
 
         # Update HMB
         self.set_hmb(self.hmb_sus.uids)
@@ -279,7 +274,6 @@ class Menstruation(ss.Connector):
 
         return
 
-
     def step_states(self):
         """ Updates for this timestep """
         ppl = self.sim.people
@@ -292,16 +286,25 @@ class Menstruation(ss.Connector):
         self.menopausal[:] = f & (ppl.age > self.age_menopause)
         self.early_meno[:] = self.menopausal & (self.age_menopause < 45)
         self.premature_meno[:] = self.menopausal & (self.age_menopause < 40)
-        self.hmb_sus[:] = self.menstruating & self.hmb_prone & ~self.hmb & ~self.sim.people.fp.pregnant
-
-        # # Contraceptive methods
-        # pill_idx = cm.get_method_by_label('Pill').idx
-        # iud_idx = cm.get_method_by_label('IUDs').idx
-        # self.pill[:] = ppl.fp.method == pill_idx
-        # self.hiud[:] = (ppl.fp.method == iud_idx) & self.hiud_prone
+        self.hmb_sus[:] = self.menstruating & self.hmb_prone & ~self.sim.people.fp.pregnant
 
         return
 
+    def finalize(self):
+        """
+        Finalize state after all modules have updated.
+
+        This ensures that any state changes made by other modules (e.g., pregnancy)
+        after the menstruation module's step() are properly reflected in HMB state.
+        """
+        # Clear HMB for any women who are currently pregnant
+        # (handles case where pregnancy occurred after menstruation module ran)
+        if hasattr(self.sim.people, 'fp'):
+            pregnant = self.sim.people.fp.pregnant
+            self.hmb[pregnant] = False
+            self.hmb_sus[pregnant] = False
+
+        super().finalize()
 
     def update_results(self):
         super().update_results()
