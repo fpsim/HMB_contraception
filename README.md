@@ -131,7 +131,7 @@ import fpsim as fp
 from menstruation import Menstruation
 from education import Education
 from interventions import HMBCarePathway
-from analyzers import track_care_seeking, track_tx_eff, track_tx_dur
+from analyzers import track_care_seeking, track_tx_eff, track_tx_dur, track_hmb_anemia
 
 # Create modules
 mens = Menstruation()
@@ -145,6 +145,7 @@ pathway = HMBCarePathway(
 care_analyzer = track_care_seeking()
 tx_eff_analyzer = track_tx_eff()
 tx_dur_analyzer = track_tx_dur()
+anemia_analyzer = track_hmb_anemia()  # Track HMB-anemia relationships
 
 # Create and run simulation
 sim = fp.Sim(
@@ -155,13 +156,14 @@ sim = fp.Sim(
     education_module=edu,
     connectors=[mens],
     interventions=[pathway],
-    analyzers=[care_analyzer, tx_eff_analyzer, tx_dur_analyzer],
+    analyzers=[care_analyzer, tx_eff_analyzer, tx_dur_analyzer, anemia_analyzer],
 )
 sim.run()
 
 # Access analyzer results
 print(f"Treatment effectiveness: {tx_eff_analyzer.results}")
 print(f"Care-seeking rates: {care_analyzer.results}")
+print(f"Anemia-HMB relationships: {anemia_analyzer.results}")
 ```
 
 ### Running scenarios
@@ -202,9 +204,16 @@ pytest test_hmb_interventions.py -v
 
 ## Version
 
-Current version: 0.3.0
+Current version: 0.4.0
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
+
+### What's new in 0.4.0
+
+- **Enhanced anemia tracking**: New `track_hmb_anemia()` analyzer monitors relationships between HMB and anemia, including stratified prevalence and counts
+- **Age-based HMB risk**: Implemented age-specific odds ratios for HMB susceptibility based on Tanzania study data
+- **School disruption modeling**: Added tracking of HMB-driven school disruptions with treatment-specific mitigation effects
+- **Analysis tools**: New `plot_analysis.py` module provides comprehensive baseline simulation visualization capabilities
 
 ## License
 
