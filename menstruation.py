@@ -44,13 +44,7 @@ class Menstruation(ss.Connector):
             age_menopause=ss.normal(50, 3),  # Age of menopause
             eff_hyst_menopause=ss.normal(-5, 1),  # Adjustment for age of menopause if hysterectomy occurs
 
-            # --- Prob of hormonal IUD
-            # The probability of IUD usage is set within FPsim, so this parameter just
-            # determines whether each woman is a hormonal or non-hormonal IUD user
-            p_hiud=ss.bernoulli(p=0.17),
-
             # HMB prediction
-            # TODO: consider replacing this binary variable (HMB yes/no) with a continuous one representing blood loss
             p_hmb_prone=ss.bernoulli(p=0.486),  # Proportion of menstruating women who experience HMB (sans interventions)
             
             # Odds ratios to create an age curve (currently calculated from Tanzania (Ibrihim 2023)) ---
@@ -71,14 +65,8 @@ class Menstruation(ss.Connector):
             hmb_seq=sc.objdict(
                 poor_mh=sc.objdict(  # Parameters for poor menstrual hygiene
                     base = 0.4,  # Intercept for poor menstrual hygiene
-                    hiud = -0.5,  # Effect of hormonal IUD on poor menstrual hygiene - placeholder 
-                    pill = -0.5, # Effect of pill on poor menstrual hygiene - placeholder
-                    txa = -0.5, # Effect of TXA on poor menstrual hygiene - placeholder
+                    hmb = 1,  # Effect of HMB on poor menstrual hygiene - placeholder
                 ),
-                #anemic=sc.objdict(  # Parameters for anemia
-                #    base = 0.01,  # Baseline probability of anemia
-                #    hmb = 1.5,  # Effect of HMB on anemia - placeholder : prob of anemia is 1/(1+np.exp(-(-np.log(1/0.01 -1)+1.5))) = 0.0433
-                #),
                 anemic=sc.objdict(  # Parameters for anemia
                     # This is converted to an intercept in the logistic regression: -np.log(1/base-1)
                     base = 0.18,  # Baseline probability of anemia
@@ -87,9 +75,6 @@ class Menstruation(ss.Connector):
                 pain=sc.objdict(  # Parameters for menstrual pain
                     base = 0.1,  # Baseline probability of menstrual pain
                     hmb = 1.5,  # Effect of HMB on menstrual pain - placeholder: prob of pain is 1/(1+np.exp(-(-np.log(1/0.1 -1)+1.5))) = 0.332
-                    hiud = -0.5,  # Effect of hormonal IUD on menstrual pain - placeholder
-                    pill = -0.5, # Effect of pill on menstrual pain - placeholder
-                    txa = -0.5, # Effect of TXA on menstrual pain - placeholder
                 ),
             ),
 
@@ -137,12 +122,11 @@ class Menstruation(ss.Connector):
             ss.FloatArr('age_menses', label="Age of menarche"),
             ss.FloatArr('age_menopause', label="Age of menopause"),
 
-            # Contraceptive methods and other HMB prevention methods
-            ss.BoolState('pill', label="Using hormonal pill"),
-            ss.BoolState('hiud', label="Using hormonal IUD"),
-            ss.BoolState('txa', label="Using tranexamic acid"),
-            ss.BoolState('nsaid', label="Using NSAIDs"),
-            ss.BoolState('hiud_prone', label="Prone to use hormonal IUD, if using IUD"),
+            # # Contraceptive methods and other HMB prevention methods
+            # ss.BoolState('pill', label="Using hormonal pill"),
+            # ss.BoolState('hiud', label="Using hormonal IUD"),
+            # ss.BoolState('txa', label="Using tranexamic acid"),
+            # ss.BoolState('nsaid', label="Using NSAIDs"),
             
         )
 
@@ -189,7 +173,6 @@ class Menstruation(ss.Connector):
         self.age_menses[f_uids] = self.pars.age_menses.rvs(f_uids)
         self.age_menopause[f_uids] = self.pars.age_menopause.rvs(f_uids)
         self.hmb_prone[f_uids] = self.pars.p_hmb_prone.rvs(f_uids)
-        self.hiud_prone[f_uids] = self.pars.p_hiud.rvs(f_uids)
         
         return
 
@@ -311,11 +294,11 @@ class Menstruation(ss.Connector):
         self.premature_meno[:] = self.menopausal & (self.age_menopause < 40)
         self.hmb_sus[:] = self.menstruating & self.hmb_prone & ~self.hmb & ~self.sim.people.fp.pregnant
 
-        # Contraceptive methods
-        pill_idx = cm.get_method_by_label('Pill').idx
-        iud_idx = cm.get_method_by_label('IUDs').idx
-        self.pill[:] = ppl.fp.method == pill_idx
-        self.hiud[:] = (ppl.fp.method == iud_idx) & self.hiud_prone
+        # # Contraceptive methods
+        # pill_idx = cm.get_method_by_label('Pill').idx
+        # iud_idx = cm.get_method_by_label('IUDs').idx
+        # self.pill[:] = ppl.fp.method == pill_idx
+        # self.hiud[:] = (ppl.fp.method == iud_idx) & self.hiud_prone
 
         return
 
@@ -325,7 +308,7 @@ class Menstruation(ss.Connector):
         ti = self.ti
         def count(arr): return np.count_nonzero(arr)
         def cond_prob(a, b): return sc.safedivide(count(a & b), count(b))
-        for res in ['hmb', 'poor_mh', 'anemic', 'pain', 'hiud', 'hyst', 'early_meno', 'premature_meno', 'pill']:
+        for res in ['hmb', 'poor_mh', 'anemic', 'pain', 'hyst', 'early_meno', 'premature_meno']:
             self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.menstruating)
         for res in ['hyst', 'early_meno', 'premature_meno']:
             self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.post_menarche)
