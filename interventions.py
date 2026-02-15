@@ -457,7 +457,11 @@ class HMBCarePathway(ss.Intervention):
                     txa=ss.uniform(ss.months(10), ss.months(14)),
                     # Note that pill and hIUD are not included because FPsim assigns their duration
                 ),
-                 
+                # --- Prob of hormonal IUD
+                # The probability of IUD usage is set within FPsim, so this parameter just
+                # determines whether each woman is a hormonal or non-hormonal IUD user
+                p_hiud=ss.bernoulli(p=0.17),
+                                 
             )
         
             self.update_pars(pars, **kwargs)
@@ -465,16 +469,24 @@ class HMBCarePathway(ss.Intervention):
             # Store probabilities that will be calculated within the module
             self._p_care = ss.bernoulli(p=0)
             self._p_adherent = ss.bernoulli(p=0)
-        
+
             # Define states for tracking cascade
             self.define_states(
-                # Treatment history
-                ss.BoolState('is_seeking_care', default=False),
+                # Care seeking
+                ss.BoolState('is_seeking_care'),
                 ss.FloatArr('care_seeking_propensity', default=ss.normal(1, 1)),
-                ss.BoolState('tried_nsaid', default=False),
-                ss.BoolState('tried_txa', default=False),
-                ss.BoolState('tried_pill', default=False),
-                ss.BoolState('tried_hiud', default=False),
+
+                # Treatment 
+                ss.BoolState('nsaid'),
+                ss.BoolState('txa'),
+                ss.BoolState('hiud'),
+                ss.BoolState('hiud_prone', label="Prone to use hormonal IUD, if using IUD"),
+
+                # Treatment history
+                ss.BoolState('tried_nsaid'),
+                ss.BoolState('tried_txa'),
+                ss.BoolState('tried_pill'),
+                ss.BoolState('tried_hiud'),
 
                 # States representing treatment responsiveness
                 # TODO, does this make sense, or better to assess another way?
@@ -485,30 +497,32 @@ class HMBCarePathway(ss.Intervention):
 
                 # Current treatment status
                 ss.FloatArr('current_treatment', default=0), # 0=none, 1=nsaid, 2=txa, 3=pill, 4=hiud
-                ss.BoolState('on_treatment', default=False),
-                ss.FloatArr('ti_start_treatment', default=-1),
-                ss.FloatArr('dur_treatment', default=0),
-                ss.FloatArr('ti_stop_treatment', default=-1),
-            
+                ss.BoolState('on_treatment'),
+                ss.FloatArr('ti_start_treatment'),
+                ss.FloatArr('dur_treatment'),
+                ss.FloatArr('ti_stop_treatment'),
+
                 # Treatment outcomes
-                ss.BoolState('treatment_effective', default=False),
-                ss.BoolState('treatment_assessed', default=False),
-                ss.BoolState('adherent', default=False),
+                ss.BoolState('treatment_effective'),
+                ss.BoolState('treatment_assessed'),
+                ss.FloatArr('assessed_treatment', default=0), # Store which treatment was assessed
+                ss.BoolState('adherent'),
                 
-                ss.BoolState('nsaid_offered', default=False),
-                ss.BoolState('nsaid_accepted', default=False),
+                ss.BoolState('nsaid_offered'),
+                ss.BoolState('nsaid_accepted'),
 
-                ss.BoolState('txa_offered', default=False),
-                ss.BoolState('txa_accepted', default=False),
+                ss.BoolState('txa_offered'),
+                ss.BoolState('txa_accepted'),
 
-                ss.BoolState('pill_offered', default=False),
-                ss.BoolState('pill_accepted', default=False),
+                ss.BoolState('pill_offered'),
+                ss.BoolState('pill_accepted'),
 
-                ss.BoolState('hiud_offered', default=False),
-                ss.BoolState('hiud_accepted', default=False),
+                ss.BoolState('hiud_offered'),
+                ss.BoolState('hiud_accepted'),
             )
         
             return
+    
     
         def init_results(self):
             """Initialize results for cascade tracking"""
@@ -543,6 +557,16 @@ class HMBCarePathway(ss.Intervention):
             return self.sim.connectors.contraception.get_method_by_label('IUDs').idx
     
         @property
+        def pill(self):
+            """Get pill users"""
+            return self.sim.people.fp.method == self.pill_idx
+    
+        @property
+        def iud(self):
+            """Get IUD users"""
+            return self.sim.people.fp.method == self.iud_idx
+
+        @property
         def is_eligible(self):
             # Default eligibility: menstruating, non-pregnant women experiencing HMB
             ppl = self.sim.people
@@ -569,6 +593,12 @@ class HMBCarePathway(ss.Intervention):
             """ Tried all available treatments """
             return self.tried_nsaid & self.tried_txa & self.tried_pill & self.tried_hiud
 
+        def set_states(self):
+            uids = ss.uids(self.hiud_prone.isnan)
+            self.hiud_prone[uids] = self.pars.p_hiud.rvs(uids)
+            self.hiud[:] = self.hiud_prone & self.iud
+            return
+
         def step(self):
             """
             Execute cascade at each timestep.
@@ -587,6 +617,7 @@ class HMBCarePathway(ss.Intervention):
             # Only run if intervention has started
             if self.sim.t.now() < self.pars.year:
                 return
+            self.set_states()
 
             # 1. Figure out who's stopping treatment
             self.stop_treatment()
@@ -778,20 +809,17 @@ class HMBCarePathway(ss.Intervention):
             self.ti_start_treatment[uids] = self.ti
             self.treatment_assessed[uids] = False
         
-            # Update menstruation module states (these affect HMB probability)
-            mens = self.sim.people.menstruation
-        
-            # For each treatment, first pull out the responders. We only adjust the 
+            # For each treatment, first pull out the responders. We only adjust the
             # states within the menstruation module for responders.
             if tx == 'nsaid':
                 nsaid_responders = uids & self.nsaid_responder
-                mens.nsaid[nsaid_responders] = True
+                self.nsaid[nsaid_responders] = True
                 self.dur_treatment[uids] = self.pars.dur_treatment[tx].rvs(uids)
                 self.ti_stop_treatment[uids] = self.ti + self.dur_treatment[uids]
-            
+
             elif tx == 'txa':
                 txa_responders = uids & self.txa_responder
-                mens.txa[txa_responders] = True
+                self.txa[txa_responders] = True
                 self.dur_treatment[uids] = self.pars.dur_treatment[tx].rvs(uids)
                 self.ti_stop_treatment[uids] = self.ti + self.dur_treatment[uids]
             
@@ -869,6 +897,8 @@ class HMBCarePathway(ss.Intervention):
             time_on_treatment = self.ti - self.ti_start_treatment[on_treatment_uids]
             ready_to_assess = on_treatment_uids[time_on_treatment >= self.pars.time_to_assess]
             self.treatment_assessed[ready_to_assess] = True
+            # Store which treatment was assessed (before it gets reset to NaN when stopped)
+            self.assessed_treatment[ready_to_assess] = self.current_treatment[ready_to_assess]
 
             if len(ready_to_assess) == 0:
                 return
@@ -885,12 +915,7 @@ class HMBCarePathway(ss.Intervention):
         def check_adherence(self, uids=None):
             """
             Check adherence for individuals currently on treatment.
-
-            Adherence probabilities are treatment-specific:
-            - NSAID: 70%
-            - TXA: 60%
-            - Pill: 75%
-            - hIUD: 85%
+            Adherence probabilities are treatment-specific.
 
             Process:
             1. Get adherence probability for each individual's current treatment
@@ -961,19 +986,17 @@ class HMBCarePathway(ss.Intervention):
             if len(uids) is None:
                 return
 
-            mens = self.sim.people.menstruation
-        
             # Reset menstruation module treatment states for NSAID and TXA. Don't need to 
             # do this for pill or IUD because FPsim handles them.
             nsaid_idx = self.treatment_map['nsaid']
             nsaid_stoppers = uids & (self.current_treatment == nsaid_idx)
-            mens.nsaid[nsaid_stoppers] = False
+            self.nsaid[nsaid_stoppers] = False
             txa_idx = self.treatment_map['txa']
             txa_stoppers = uids & (self.current_treatment == txa_idx)
-            mens.txa[txa_stoppers] = False
+            self.txa[txa_stoppers] = False
                     
             # Reset tracking states
-            self.current_treatment[uids] = 0
+            self.current_treatment[uids] = np.nan
             self.on_treatment[uids] = False
             self.dur_treatment[uids] = np.nan
             self.treatment_effective[uids] = False

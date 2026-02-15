@@ -55,8 +55,10 @@ class track_tx_eff(ss.Analyzer):
             if tx_name == 'none':
                 continue
 
-            # Filter for people on this specific treatment
-            on_this_tx = pathway.current_treatment[assessed_uids] == tx_idx
+            # Filter for people assessed on this specific treatment
+            # Use assessed_treatment (which is saved at assessment time) instead of current_treatment
+            # (which may be reset to NaN if treatment has stopped)
+            on_this_tx = pathway.assessed_treatment[assessed_uids] == tx_idx
             assessed_this_tx_uids = assessed_uids[on_this_tx]
 
             # Only count UIDs we haven't counted yet
@@ -92,6 +94,75 @@ class track_tx_eff(ss.Analyzer):
             return self.n_effective[treatment] / self.n_assessed[treatment]
         else:
             return None
+
+
+class track_tx_dur(ss.Analyzer):
+    """
+    Track treatment durations for each treatment type.
+
+    Captures duration at the moment treatment is started to avoid issues
+    with durations being overwritten when people switch treatments.
+
+    For each treatment (NSAID, TXA, Pill, hIUD), tracks:
+    - List of durations assigned at treatment start
+
+    This analyzer requires sim.interventions.hmb_care_pathway.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # Track durations for each treatment
+        self.durations = {
+            'nsaid': [],
+            'txa': [],
+            'pill': [],
+            'hiud': []
+        }
+
+        # Track which UIDs we've already recorded to avoid double-counting
+        self.counted_uids = {'nsaid': set(), 'txa': set(), 'pill': set(), 'hiud': set()}
+
+        return
+
+    def step(self):
+        """Track treatment durations at each timestep"""
+
+        # Find the HMB care pathway intervention
+        pathway = None
+        for intv in self.sim.interventions.values():
+            if hasattr(intv, 'treatment_map'):
+                pathway = intv
+                break
+
+        if pathway is None:
+            return
+
+        # For each treatment type, check for newly started treatments
+        for tx_name, tx_idx in pathway.treatment_map.items():
+            if tx_name == 'none':
+                continue
+
+            # Get people who accepted this treatment
+            accepted = getattr(pathway, f'{tx_name}_accepted')
+            accepted_uids = accepted.uids
+
+            # Find new acceptors we haven't counted yet
+            new_uids = [uid for uid in accepted_uids if uid not in self.counted_uids[tx_name]]
+
+            if len(new_uids) > 0:
+                # Add to counted set
+                self.counted_uids[tx_name].update(new_uids)
+
+                # Get their durations (only for NSAID/TXA, as pill/hIUD use FPsim durations)
+                if tx_name in ['nsaid', 'txa']:
+                    new_uids_arr = np.array(new_uids)
+                    durs = pathway.dur_treatment[new_uids_arr]
+                    # Only save non-NaN durations
+                    valid_durs = durs[~np.isnan(durs)]
+                    self.durations[tx_name].extend(valid_durs.tolist())
+
+        return
 
 
 class track_care_seeking(ss.Analyzer):
