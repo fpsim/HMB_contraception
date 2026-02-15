@@ -394,7 +394,7 @@ class HMBCarePathway(ss.Intervention):
         - Current treatment status (on_treatment, current_treatment)
         - Treatment outcomes (treatment_effective, adherent)
         - Responder status (nsaid_responder, etc.)
-        - Care-seeking behavior (is_seeking_care, care_seeking_propensity)
+        - Care-seeking behavior (seeking_care, care_seeking_propensity)
         """
         # Treatment encoding mapping
         treatment_map = {
@@ -416,8 +416,8 @@ class HMBCarePathway(ss.Intervention):
                 # Care-seeking behavior
                 care_behavior=sc.objdict(  # Parameters for poor menstrual hygiene
                     base = 0.5,  # Baseline 50% odds of seeking care
-                    anemic = 1,  # Increased care-seeking behavior for those with anemia
-                    pain = 0.25, # Increased care-seeking behavior for those with pain
+                    anemic = 1,  # Increased care-seeking behavior for those with anemia - placeholder
+                    pain = 0.25, # Increased care-seeking behavior for those with pain - placeholder
                 ),
 
                 # Treatment efficacy (probability of being a responder)
@@ -473,7 +473,7 @@ class HMBCarePathway(ss.Intervention):
             # Define states for tracking cascade
             self.define_states(
                 # Care seeking
-                ss.BoolState('is_seeking_care'),
+                ss.BoolState('seeking_care'),
                 ss.FloatArr('care_seeking_propensity', default=ss.normal(1, 1)),
 
                 # Treatment 
@@ -522,7 +522,6 @@ class HMBCarePathway(ss.Intervention):
             )
         
             return
-    
     
         def init_results(self):
             """Initialize results for cascade tracking"""
@@ -652,9 +651,9 @@ class HMBCarePathway(ss.Intervention):
                 uids: UIDs to check. If None, uses eligible individuals not on treatment.
 
             Updates:
-                is_seeking_care: Set to True for those who seek care this timestep
+                seeking_care: Set to True for those who seek care this timestep
             """
-            self.is_seeking_care[:] = False
+            self.seeking_care[:] = False
             if uids is None: uids = (self.is_eligible & ~self.on_treatment).uids
 
             # Main logic
@@ -662,7 +661,7 @@ class HMBCarePathway(ss.Intervention):
             self._p_care.set(0)
             self._p_care.set(p_care)
             seeks_care = self._p_care.filter(uids)
-            self.is_seeking_care[seeks_care] = True
+            self.seeking_care[seeks_care] = True
 
             return
     
@@ -693,7 +692,7 @@ class HMBCarePathway(ss.Intervention):
                 on_treatment: Set via _start_treatment for accepted treatments
             """
             # Treatment can be offered to those seeking care
-            if uids is None: uids = self.is_seeking_care.uids
+            if uids is None: uids = self.seeking_care.uids
         
             if len(uids) == 0:
                 return
@@ -1015,7 +1014,7 @@ class HMBCarePathway(ss.Intervention):
         
             # Care-seeking
             if np.count_nonzero(hmb_cases) > 0:
-                self.results.seeking_care_prev[ti] = np.count_nonzero(self.is_seeking_care & hmb_cases) / np.count_nonzero(hmb_cases)
+                self.results.seeking_care_prev[ti] = np.count_nonzero(self.seeking_care & hmb_cases) / np.count_nonzero(hmb_cases)
             else:
                 self.results.seeking_care_prev[ti] = 0
                 
