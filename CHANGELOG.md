@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-02-15
+
+### Added
+- **Enhanced anemia tracking:**
+  - `track_hmb_anemia()` analyzer for monitoring HMB-anemia relationships
+  - Tracks anemia prevalence stratified by HMB status (with/without HMB)
+  - Tracks HMB prevalence stratified by anemia status (with/without anemia)
+  - Comprehensive anemia counts and prevalence metrics in menstruating non-pregnant women
+- **Analysis and plotting tools:**
+  - `plot_analysis.py` module for baseline simulation visualization
+  - Functions for plotting HMB dynamics, anemia prevalence, and related outcomes
+  - `run_analysis.py` script for running analysis workflows
+
+### Changed
+- **HMB prediction model:**
+  - Increased baseline HMB probability from 0.95 to 0.995 among prone individuals
+  - Removed treatment effects from menstruation module (now handled in HMBCarePathway)
+  - Simplified prediction logic by centralizing treatment response in intervention
+- **Code organization:**
+  - Removed deprecated pill/hIUD/TXA states from menstruation module
+  - Consolidated treatment effects in intervention module
+  - Cleaned up test files and example scripts
+
+### Removed
+- Treatment-specific states from menstruation module (`pill`, `hiud`, `txa`, `hiud_prone`)
+- Treatment effect parameters from HMB and sequelae prediction in menstruation module
+- Old example scripts (`run_kenya.py`, `run_kenya_package_extended.py`, `run_sensitivity_analysis.py`, `test_run.py`)
+
+---
+
 ## [0.3.0] - 2026-02-15
 
 ### Added
