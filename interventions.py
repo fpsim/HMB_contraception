@@ -39,10 +39,13 @@ class HMBTreatmentBase(ss.Intervention):
         self._p_care = ss.bernoulli(p=0)
         self._p_accept = ss.bernoulli(p=0)
         self._p_adherent = ss.bernoulli(p=0)
+        self._p_discontinue = ss.bernoulli(p=0)
 
         # Handle parameters
         self.define_pars(
             care_seeking_dist=ss.normal(1, 1),  # Default distribution
+            use_at_will=False,  # Whether treatment is use-at-will (NSAIDs/TXA) vs continuous (Pill/hIUD)
+            p_discontinue_nonadherent=0.1,  # Probability of discontinuation per timestep when non-adherent (for use-at-will)
         )
         self.update_pars(pars, **kwargs)
 
@@ -77,6 +80,7 @@ class HMBTreatmentBase(ss.Intervention):
             ss.FloatArr('ti_start_treatment'),
             ss.FloatArr('dur_treatment'),
             ss.FloatArr('ti_stop_treatment'),
+            ss.FloatArr('ti_nonadherent'),  # Track when non-adherence started (for gradual discontinuation)
         )
 
     def _calc_individualized_prob(self, uids, base_prob):
@@ -166,10 +170,9 @@ class HMBTreatmentBase(ss.Intervention):
         """
         Check adherence for those on treatment.
 
-        This method is identical across all treatments:
-        - Calculate individualized adherence probability
-        - Determine who is adherent
-        - Stop non-adherent individuals
+        Behavior depends on treatment type:
+        - Use-at-will (NSAIDs/TXA): Probabilistic discontinuation when non-adherent
+        - Continuous (Pill/hIUD): Immediate cessation when non-adherent
         """
         on_treatment_uids = self.on_treatment.uids
         if len(on_treatment_uids) == 0:
@@ -183,9 +186,26 @@ class HMBTreatmentBase(ss.Intervention):
         is_adherent = self._p_adherent.filter(on_treatment_uids)
         self.adherent[is_adherent] = True
 
-        # Stop non-adherent
-        stoppers = on_treatment_uids & ~self.adherent
-        self.ti_stop_treatment[stoppers] = self.ti + 1
+        # Get non-adherent individuals
+        nonadherent_uids = on_treatment_uids & ~self.adherent
+
+        if len(nonadherent_uids) == 0:
+            return
+
+        if self.pars.use_at_will:
+            # Use-at-will treatments: probabilistic discontinuation over time
+            # Mark when non-adherence started
+            newly_nonadherent = nonadherent_uids & np.isnan(self.ti_nonadherent[nonadherent_uids])
+            self.ti_nonadherent[newly_nonadherent] = self.ti
+
+            # Apply discontinuation probability each timestep
+            self._p_discontinue.set(0)
+            self._p_discontinue.set(self.pars.p_discontinue_nonadherent)
+            discontinue = self._p_discontinue.filter(nonadherent_uids)
+            self.ti_stop_treatment[discontinue] = self.ti + 1
+        else:
+            # Continuous treatments: immediate cessation
+            self.ti_stop_treatment[nonadherent_uids] = self.ti + 1
 
     def stop_treatment(self):
         """
@@ -204,6 +224,7 @@ class HMBTreatmentBase(ss.Intervention):
         self.treatment_effective[stoppers] = False
         self.treatment_assessed[stoppers] = False
         self.adherent[stoppers] = False
+        self.ti_nonadherent[stoppers] = np.nan
 
     @property
     def anemic(self):
@@ -338,6 +359,10 @@ class NSAIDTreatment(HMBTreatmentBase):
             # Timing
             time_to_assess=ss.months(3),
             dur_treatment=ss.uniform(ss.months(10), ss.months(14)),
+
+            # NSAIDs are use-at-will (taken during menstruation only)
+            use_at_will=True,
+            p_discontinue_nonadherent=0.1,  # 10% chance per timestep of discontinuing when non-adherent
         )
 
         self.update_pars(pars, **kwargs)
@@ -388,6 +413,10 @@ class TXATreatment(HMBTreatmentBase):
             # Timing
             time_to_assess=ss.months(3),
             dur_treatment=ss.uniform(ss.months(10), ss.months(14)),
+
+            # TXA is use-at-will (taken during menstruation only)
+            use_at_will=True,
+            p_discontinue_nonadherent=0.1,  # 10% chance per timestep of discontinuing when non-adherent
         )
 
         self.update_pars(pars, **kwargs)

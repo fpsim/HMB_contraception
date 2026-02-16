@@ -492,7 +492,7 @@ if __name__ == '__main__':
     try:
         print('Checking for existing results...')
         msim_base = sc.loadobj('results/baseline_msim.obj')
-        msim_intv = sc.loadobcj('results/intervention_msim.obj', )
+        msim_intv = sc.loadobj('results/intervention_msim.obj', )
         print('Found existing results! Loading from disk...\n')
     except:
         print('No existing results found. Running new simulations...\n')
