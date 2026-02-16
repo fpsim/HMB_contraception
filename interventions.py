@@ -63,6 +63,7 @@ class HMBTreatmentBase(ss.Intervention):
             ss.BoolState('treatment_effective'),
             ss.BoolState('treatment_assessed'),
             ss.BoolState('adherent'),
+            ss.BoolState('was_effective', default=False),  # Track if treatment was ever effective (persists after stopping)
 
             # Timing
             ss.FloatArr('ti_start_treatment'),
@@ -149,6 +150,7 @@ class HMBTreatmentBase(ss.Intervention):
         no_hmb = ready_to_assess & ~hmb
 
         self.treatment_effective[no_hmb] = True
+        self.was_effective[no_hmb] = True  # Mark as having been effective (persists after stopping)
         self.treatment_effective[has_hmb] = False
         self.ti_stop_treatment[has_hmb] = self.ti + 1  # Stop ineffective treatment
 
@@ -273,7 +275,14 @@ class HMBTreatmentBase(ss.Intervention):
         """
         Determine who is eligible for treatment.
 
-        Default implementation: eligible if seeking care, haven't tried, and not on treatment.
+        Default implementation: eligible if:
+        - Seeking care, AND
+        - (Haven't tried this treatment OR treatment was previously effective), AND
+        - Not currently on this treatment
+
+        This allows women to continue with treatments that worked for them,
+        rather than being forced to progress through the cascade.
+
         Override this method to add treatment-specific eligibility criteria
         (e.g., Pill/hIUD check fertility intent).
 
@@ -283,7 +292,7 @@ class HMBTreatmentBase(ss.Intervention):
         Returns:
             UIDs of people eligible to try this treatment
         """
-        return care_seekers & ~self.tried_treatment & ~self.on_treatment
+        return care_seekers & (~self.tried_treatment | self.was_effective) & ~self.on_treatment
 
 
 # ============================================================================

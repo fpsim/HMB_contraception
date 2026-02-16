@@ -235,6 +235,9 @@ if __name__ == '__main__':
     print('Running baseline simulations...')
     msim_base.run()
 
+    print('Generating baseline characteristics plot...')
+    plot_baseline_characteristics(msim_base)
+
     print('Generating HMB-anemia correlation plots...')
     plot_hmb_anemia_correlation(msim_base)
 
@@ -243,4 +246,6 @@ if __name__ == '__main__':
     sc.path('results').mkdir(exist_ok=True)
     sc.saveobj('results/baseline_msim.obj', msim_base)
 
-    print('Done!')
+    print('Done! Generated:')
+    print('  - figures/baseline_characteristics.png')
+    print('  - figures/hmb_anemia_relationship.png')
