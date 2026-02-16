@@ -219,6 +219,33 @@ class Menstruation(ss.Connector):
 
         return
 
+    def _set_hmb_sequelae(self):
+        """
+        Set non-permanent sequelae of HMB (anemia, pain, poor menstrual hygiene).
+
+        Called from finish_step() to ensure sequelae reflect post-intervention HMB status.
+        """
+        mens_uids = self.menstruating.uids
+
+        # Set non-permanent sequelae of HMB
+        for seq, p in self.pars.hmb_seq.items():
+            old_attr = getattr(self, seq)
+            old_attr[:] = False  # Reset the state
+            self.setattribute(seq, old_attr)
+            attr_dist = getattr(self, f'_p_{seq}')
+            attr_dist.set(0)
+
+            # Calculate the probability of the sequelae
+            p_val = logistic(self, mens_uids, p)
+            attr_dist = getattr(self, f'_p_{seq}')
+            attr_dist.set(p_val)
+            has_attr = attr_dist.filter(mens_uids)
+            new_attr = getattr(self, seq)
+            new_attr[has_attr] = True
+            self.setattribute(seq, new_attr)
+
+        return
+
     def step(self):
         """ Updates for this timestep """
 
@@ -236,28 +263,10 @@ class Menstruation(ss.Connector):
         # Update HMB
         self.set_hmb(self.hmb_sus.uids)
 
-        # Set non-permanent sequalae of HMB
-        for seq, p in self.pars.hmb_seq.items():
-            old_attr = getattr(self, seq)
-            old_attr[:] = False  # Reset the state
-            # Update the state
-            #setattr(self, seq, old_attr)  
-            self.setattribute(seq, old_attr)
-            attr_dist = getattr(self, f'_p_{seq}')
-            attr_dist.set(0)
+        # Note: HMB sequelae (anemia, pain, poor_mh) are calculated in finish_step()
+        # to ensure they reflect post-intervention HMB status
 
-            # Calculate the probability of the sequelae
-            p_val = logistic(self, mens_uids, p)
-            attr_dist = getattr(self, f'_p_{seq}')
-            attr_dist.set(p_val)
-            has_attr = attr_dist.filter(mens_uids)
-            new_attr = getattr(self, seq)
-            new_attr[has_attr] = True
-            # Update the state
-            #setattr(self, seq, new_attr)
-            self.setattribute(seq, new_attr)
-
-        # Set hysterectomy state
+        # Set hysterectomy state (permanent sequela, kept in step())
         hyst_sus = (self.menstruating & ~self.hyst).uids
         p_hyst = logistic(self, hyst_sus, self.pars.hyst)
         self._p_hyst.set(0)
@@ -287,12 +296,26 @@ class Menstruation(ss.Connector):
 
         return
 
+    def finish_step(self):
+        """
+        Finish the timestep after interventions have run.
+
+        Calculate HMB sequelae here to ensure they reflect post-intervention HMB status.
+        This is called after interventions.step() but before results are finalized.
+        """
+        # Calculate HMB sequelae after interventions have modified HMB status
+        self._set_hmb_sequelae()
+
+        super().finish_step()
+        return
+
     def finalize(self):
         """
         Finalize state after all modules have updated.
 
-        This ensures that any state changes made by other modules (e.g., pregnancy)
-        after the menstruation module's step() are properly reflected in HMB state.
+        This ensures that any state changes made by other modules (e.g., pregnancy,
+        interventions) after the menstruation module's step() are properly reflected
+        in HMB state and its sequelae.
         """
         # Clear HMB for any women who are currently pregnant
         # (handles case where pregnancy occurred after menstruation module ran)
