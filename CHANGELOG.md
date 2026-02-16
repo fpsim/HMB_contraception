@@ -8,30 +8,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.0] - 2026-02-15
 
 ### Added
+- **Modular intervention architecture:**
+  - Refactored monolithic `HMBCarePathway` into modular treatment classes:
+    - `NSAIDTreatment`, `TXATreatment`, `PillTreatment`, `hIUDTreatment`
+    - Each treatment is a standalone intervention that can be used independently
+    - `HMBCascade` orchestrator coordinates sequential treatment offering
+  - `HMBTreatmentBase` base class with shared functionality
+  - Flexible eligibility system using functions instead of hard-coded dependencies
 - **Enhanced anemia tracking:**
   - `track_hmb_anemia()` analyzer for monitoring HMB-anemia relationships
   - Tracks anemia prevalence stratified by HMB status (with/without HMB)
   - Tracks HMB prevalence stratified by anemia status (with/without anemia)
   - Comprehensive anemia counts and prevalence metrics in menstruating non-pregnant women
-- **Analysis and plotting tools:**
-  - `plot_analysis.py` module for baseline simulation visualization
-  - Functions for plotting HMB dynamics, anemia prevalence, and related outcomes
-  - `run_analysis.py` script for running analysis workflows
+- **Component analysis tools:**
+  - `component_analysis.py` for analyzing individual treatment impacts
+  - `run_component_analysis.py` for running component-level comparisons
+  - `analyze_cascade_impact.py` with heuristic calculator for treatment success probabilities
+- **Comprehensive plotting and analysis:**
+  - `run_cascade.py` for full cascade intervention analysis with visualization
+  - `run_baseline.py` for baseline simulation and characteristics plotting
+  - Integrated plotting functions for intervention impact, cascade progression, and baseline dynamics
+- **Enhanced analyzers:**
+  - `track_cascade()` analyzer for detailed cascade metrics and treatment depth tracking
+  - Expanded `track_care_seeking()` with care-seeking propensity stratification
+  - All analyzers updated to work with modular architecture
 
 ### Changed
+- **HMB sequelae calculation timing (CRITICAL BUG FIX):**
+  - **Fixed execution order bug that prevented interventions from reducing anemia**
+  - Moved sequelae (anemia, pain, poor menstrual hygiene) calculation from `step()` to `finish_step()`
+  - Sequelae now calculated AFTER interventions run, ensuring they reflect post-intervention HMB status
+  - Previously, sequelae were calculated before interventions, causing interventions to have no impact on total anemia
+  - New execution order: Connector.step() → Intervention.step() → Connector.finish_step() → update_results()
+- **Treatment continuation logic (BUG FIX):**
+  - Added `was_effective` state to track successful treatments persistently
+  - Women can now continue on treatments that worked for them instead of being forced to progress through cascade
+  - Modified eligibility logic: `(~tried_treatment | was_effective) & ~on_treatment`
+  - Dramatically improves intervention effectiveness by allowing continuation of successful treatments
 - **HMB prediction model:**
   - Increased baseline HMB probability from 0.95 to 0.995 among prone individuals
-  - Removed treatment effects from menstruation module (now handled in HMBCarePathway)
+  - Removed treatment effects from menstruation module (now handled via interventions)
   - Simplified prediction logic by centralizing treatment response in intervention
 - **Code organization:**
   - Removed deprecated pill/hIUD/TXA states from menstruation module
   - Consolidated treatment effects in intervention module
-  - Cleaned up test files and example scripts
+  - Updated all tests to work with modular architecture
+  - Reorganized analysis and plotting scripts
 
 ### Removed
 - Treatment-specific states from menstruation module (`pill`, `hiud`, `txa`, `hiud_prone`)
 - Treatment effect parameters from HMB and sequelae prediction in menstruation module
+- Old analysis scripts (`plot_analysis.py`, `run_analysis.py`)
 - Old example scripts (`run_kenya.py`, `run_kenya_package_extended.py`, `run_sensitivity_analysis.py`, `test_run.py`)
+- Jupyter notebook (`HMB intervention package - explore parameter sweep.ipynb`)
 
 ---
 
