@@ -13,7 +13,7 @@ import fpsim as fp
 
 from menstruation import Menstruation
 from education import Education
-from interventions import HMBCarePathway
+from hmb_cascade import HMBCascade
 from analyzers import track_care_seeking, track_tx_eff, track_tx_dur, track_hmb_anemia, track_cascade
 
 
@@ -51,9 +51,11 @@ def make_intervention_sim(seed=0):
     """
     mens = Menstruation()
     edu = Education()
-    pathway = HMBCarePathway(
-        year=2020,
-        time_to_assess=3,  # Assess treatment effectiveness after 3 months
+    cascade = HMBCascade(
+        pars=dict(
+            year=2020,
+            time_to_assess=ss.months(3),  # Assess treatment effectiveness after 3 months
+        )
     )
     care_analyzer = track_care_seeking()
     tx_eff_analyzer = track_tx_eff()
@@ -68,7 +70,7 @@ def make_intervention_sim(seed=0):
         location='kenya',
         education_module=edu,
         connectors=[mens],
-        interventions=[pathway],
+        interventions=[cascade],
         analyzers=[care_analyzer, tx_eff_analyzer, tx_dur_analyzer, hmb_anemia_analyzer],
         rand_seed=seed,
         verbose=0,
@@ -84,15 +86,35 @@ def make_iud_only_sim(seed=0):
     """
     mens = Menstruation()
     edu = Education()
-    pathway = HMBCarePathway(
-        year=2020,
-        time_to_assess=3,  # Assess treatment effectiveness after 3 months
-        prob_offer=sc.objdict(
-            nsaid=ss.bernoulli(p=0.0),  # Don't offer NSAID
-            txa=ss.bernoulli(p=0.0),    # Don't offer TXA
-            pill=ss.bernoulli(p=0.0),   # Don't offer pill
-            hiud=ss.bernoulli(p=0.9),   # Only offer hIUD
-        ),
+    cascade = HMBCascade(
+        pars=dict(
+            year=2020,
+            time_to_assess=ss.months(3),  # Assess treatment effectiveness after 3 months
+            nsaid=sc.objdict(
+                efficacy=0.5,
+                adherence=0.7,
+                prob_offer=ss.bernoulli(p=0.0),  # Don't offer NSAID
+                prob_accept=ss.bernoulli(p=0.7),
+            ),
+            txa=sc.objdict(
+                efficacy=0.6,
+                adherence=0.6,
+                prob_offer=ss.bernoulli(p=0.0),  # Don't offer TXA
+                prob_accept=ss.bernoulli(p=0.6),
+            ),
+            pill=sc.objdict(
+                efficacy=0.7,
+                adherence=0.75,
+                prob_offer=ss.bernoulli(p=0.0),  # Don't offer pill
+                prob_accept=ss.bernoulli(p=0.5),
+            ),
+            hiud=sc.objdict(
+                efficacy=0.8,
+                adherence=0.85,
+                prob_offer=ss.bernoulli(p=0.9),  # Only offer hIUD
+                prob_accept=ss.bernoulli(p=0.5),
+            ),
+        )
     )
     care_analyzer = track_care_seeking()
     tx_eff_analyzer = track_tx_eff()
@@ -107,7 +129,7 @@ def make_iud_only_sim(seed=0):
         location='kenya',
         education_module=edu,
         connectors=[mens],
-        interventions=[pathway],
+        interventions=[cascade],
         analyzers=[care_analyzer, tx_eff_analyzer, tx_dur_analyzer, hmb_anemia_analyzer],
         rand_seed=seed,
         verbose=0,
@@ -196,9 +218,11 @@ def make_cascade_intervention_sim(seed=0):
     """
     mens = Menstruation()
     edu = Education()
-    pathway = HMBCarePathway(
-        year=2020,
-        time_to_assess=3,
+    cascade = HMBCascade(
+        pars=dict(
+            year=2020,
+            time_to_assess=ss.months(3),
+        )
     )
     cascade_analyzer = track_cascade()
     hmb_anemia_analyzer = track_hmb_anemia()
@@ -211,7 +235,7 @@ def make_cascade_intervention_sim(seed=0):
         location='kenya',
         education_module=edu,
         connectors=[mens],
-        interventions=[pathway],
+        interventions=[cascade],
         analyzers=[cascade_analyzer, hmb_anemia_analyzer],
         rand_seed=seed,
         verbose=0,
