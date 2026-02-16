@@ -832,22 +832,3 @@ def make_component_sim(component, seed=0, **component_kwargs):
 
     return sim
 
-
-# ============================================================================
-# Test execution
-# ============================================================================
-
-if __name__ == '__main__':
-    # Test cascade
-    print('Testing HMB cascade...')
-    sim = make_cascade_sim(seed=0)
-    sim.run()
-
-    cascade = sim.interventions.hmb_cascade
-    print(f'\nFinal cascade depth distribution:')
-    depth = cascade.get_cascade_depth()
-    for i in range(5):
-        n = (depth == i).sum()
-        print(f'  Tried {i} treatment(s): {n} people')
-
-    print('\nCascade test complete!')
