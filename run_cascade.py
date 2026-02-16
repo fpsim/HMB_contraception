@@ -57,7 +57,7 @@ def make_intervention_sim(seed=0):
     edu = Education()
     cascade = HMBCascade(
         pars=dict(
-            year=2020,
+            year=2025,
             time_to_assess=ss.months(3),  # Assess treatment effectiveness after 3 months
         )
     )
