@@ -13,11 +13,13 @@ Tests core HMB functionality without interventions:
 - Hysterectomy prevalence
 
 ### 2. test_hmb_interventions.py
-Tests the intervention care pathway:
+Tests the modular intervention architecture:
 - Care-seeking behavior responds appropriately to anemia and pain
 - Treatment efficacy rates match parameters
 - Treatment durations follow expected distributions
 - Treatment cascade progresses correctly through stages
+- Individual treatment components work standalone
+- HMBCascade orchestrator enforces proper sequencing
 
 ### 3. test_refactored_architecture.py
 Tests the refactored treatment architecture:
@@ -61,8 +63,8 @@ Tests the baseline HMB module behavior:
 - **Menstrual state transitions**: Validates menarche and menopause timing
 - **Hysterectomy prevalence**: Tests hysterectomy rates by age
 
-### test_hmb_interventions.py - Care pathway validation
-Tests intervention components using pytest framework:
+### test_hmb_interventions.py - Modular intervention validation
+Tests the modular intervention architecture using pytest framework:
 
 #### test_care_seeking
 - Validates care-seeking rates respond to anemia and pain
@@ -109,7 +111,7 @@ Each test file provides simulation configurations:
 
 **test_hmb_interventions.py:**
 - `base_sim()`: Basic simulation without interventions (for baseline comparisons)
-- `intervention_sim()`: Simulation with HMB care pathway intervention and analyzers
+- `intervention_sim()`: Simulation with HMBCascade intervention and analyzers
 
 **test_refactored_architecture.py:**
 - `make_component_sim(component)`: Simulation with a single treatment component
@@ -121,8 +123,8 @@ To add new tests:
 
 1. Determine which test file is most appropriate:
    - `test_hmb.py` for core HMB module behavior
-   - `test_hmb_interventions.py` for care pathway and treatment validation
-   - `test_refactored_architecture.py` for architecture and component testing
+   - `test_hmb_interventions.py` for modular intervention architecture and treatment validation
+   - `test_refactored_architecture.py` for architecture and component testing (standalone execution)
 2. Follow the naming convention: `test_descriptive_name`
 3. Include a docstring explaining what is being tested
 4. Add appropriate assertions

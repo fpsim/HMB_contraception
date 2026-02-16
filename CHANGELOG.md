@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - 2026-02-15
+## [0.4.0] - 2026-02-16
 
 ### Added
 - **Modular intervention architecture:**
@@ -45,6 +45,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Women can now continue on treatments that worked for them instead of being forced to progress through cascade
   - Modified eligibility logic: `(~tried_treatment | was_effective) & ~on_treatment`
   - Dramatically improves intervention effectiveness by allowing continuation of successful treatments
+- **Treatment-specific adherence logic:**
+  - Use-at-will treatments (NSAIDs/TXA) now use probabilistic discontinuation when non-adherent
+  - Non-adherent individuals have a per-timestep probability of discontinuing rather than immediate cessation
+  - Continuous treatments (Pill/hIUD) retain immediate cessation for non-adherence
+  - Added `use_at_will` parameter to distinguish treatment types
+  - Added `p_discontinue_nonadherent` parameter for gradual discontinuation probability
+  - Added `ti_nonadherent` state to track when non-adherence began
 - **HMB prediction model:**
   - Increased baseline HMB probability from 0.95 to 0.995 among prone individuals
   - Removed treatment effects from menstruation module (now handled via interventions)

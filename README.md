@@ -12,9 +12,13 @@ This package extends [Starsim](https://github.com/starsimhub/starsim) and [FPsim
 - Educational impacts of HMB
 - Population-level outcomes
 
+## Modular architecture
+
+The model implements a modular treatment architecture where each treatment (NSAID, TXA, Pill, hIUD) is a standalone intervention that can be used independently or combined in a cascade. The `HMBCascade` orchestrator coordinates sequential treatment offering.
+
 ## Care treatment pathway
 
-The model implements a sequential care cascade for HMB management, where individuals progress through treatment options based on care-seeking behavior, treatment effectiveness, and adherence:
+The care cascade for HMB management follows a sequential progression through treatment options based on care-seeking behavior, treatment effectiveness, and adherence:
 
 ```mermaid
 flowchart TD
@@ -72,9 +76,13 @@ flowchart TD
 - **Sequential cascade**: NSAID → TXA → Pill → hIUD
 - **Fertility intent**: Blocks access to hormonal contraceptives (pill/hIUD) for women planning pregnancy
 - **Treatment effectiveness**: Assessed after 3 months based on HMB resolution
-- **Adherence**: Stochastic with treatment-specific probabilities (NSAID: 70%, TXA: 60%, Pill: 75%, hIUD: 85%)
+- **Adherence**:
+  - Stochastic with treatment-specific probabilities (NSAID: 70%, TXA: 60%, Pill: 75%, hIUD: 85%)
+  - Use-at-will treatments (NSAIDs/TXA): Probabilistic discontinuation when non-adherent
+  - Continuous treatments (Pill/hIUD): Immediate cessation when non-adherent
 - **Treatment duration**: Automatic stopping after predefined duration or due to ineffectiveness/non-adherence
 - **Re-entry**: Individuals whose treatment stops can re-enter the care pathway if HMB persists
+- **Treatment continuation**: Women can continue treatments that worked for them rather than being forced to progress through the cascade
 
 ## Installation
 
@@ -124,28 +132,29 @@ sim.run()
 sim.plot()
 ```
 
-### Using the care pathway intervention with analyzers
+### Using the treatment cascade with analyzers
 
 ```python
 import fpsim as fp
+import starsim as ss
 from menstruation import Menstruation
 from education import Education
-from interventions import HMBCarePathway
-from analyzers import track_care_seeking, track_tx_eff, track_tx_dur, track_hmb_anemia
+from interventions import HMBCascade
+from analyzers import track_hmb_anemia, track_cascade
 
 # Create modules
 mens = Menstruation()
 edu = Education()
 
-# Create intervention and analyzers
-pathway = HMBCarePathway(
-    year=2020,
-    time_to_assess=3,  # months before assessing treatment effectiveness
+# Create cascade intervention and analyzers
+cascade = HMBCascade(
+    pars=dict(
+        year=2020,
+        time_to_assess=ss.months(3),
+    )
 )
-care_analyzer = track_care_seeking()
-tx_eff_analyzer = track_tx_eff()
-tx_dur_analyzer = track_tx_dur()
-anemia_analyzer = track_hmb_anemia()  # Track HMB-anemia relationships
+anemia_analyzer = track_hmb_anemia()
+cascade_analyzer = track_cascade()
 
 # Create and run simulation
 sim = fp.Sim(
@@ -155,37 +164,67 @@ sim = fp.Sim(
     location='kenya',
     education_module=edu,
     connectors=[mens],
-    interventions=[pathway],
-    analyzers=[care_analyzer, tx_eff_analyzer, tx_dur_analyzer, anemia_analyzer],
+    interventions=[cascade],
+    analyzers=[anemia_analyzer, cascade_analyzer],
 )
 sim.run()
 
 # Access analyzer results
-print(f"Treatment effectiveness: {tx_eff_analyzer.results}")
-print(f"Care-seeking rates: {care_analyzer.results}")
 print(f"Anemia-HMB relationships: {anemia_analyzer.results}")
+print(f"Cascade progression: {cascade_analyzer.results}")
+```
+
+### Using individual treatment components
+
+```python
+from interventions import NSAIDTreatment, TXATreatment
+
+# Use individual treatments for component analysis
+nsaid = NSAIDTreatment(
+    pars=dict(
+        year=2020,
+        efficacy=0.5,
+        adherence=0.7,
+    )
+)
+
+sim = fp.Sim(
+    start=2020,
+    stop=2030,
+    n_agents=5000,
+    location='kenya',
+    education_module=edu,
+    connectors=[mens],
+    interventions=[nsaid],
+)
+sim.run()
 ```
 
 ### Running scenarios
 
-The package includes several example scripts:
+The package includes several analysis scripts:
 
-- `test_run.py` - Basic test of the model
-- `run_kenya.py` - Kenya-specific parameterization
-- `run_kenya_package_extended.py` - Extended intervention package analysis
-- `run_sensitivity_analysis.py` - Parameter sensitivity analysis
+- `run_baseline.py` - Baseline simulation and characteristics plotting
+- `run_cascade.py` - Full cascade intervention analysis with visualization
+- `run_component_analysis.py` - Component-level treatment impact analysis
+- `run_care_sensitivity.py` - Care-seeking parameter sensitivity analysis
+- `analyze_cascade_impact.py` - Treatment success probability calculations
 
 ## Project structure
 
 - `menstruation.py` - Core HMB state module
-- `interventions.py` - Contraceptive and treatment interventions (HMBCarePathway)
+- `interventions.py` - Modular treatment interventions (NSAIDTreatment, TXATreatment, PillTreatment, hIUDTreatment, HMBCascade)
 - `education.py` - Educational impact modeling
-- `analyzers.py` - Specialized analyzers for tracking care-seeking, treatment effectiveness, and durations
+- `analyzers.py` - Specialized analyzers for tracking HMB-anemia relationships and cascade progression
 - `utils.py` - Shared utility functions (logistic regression)
+- `component_analysis.py` - Tools for analyzing individual treatment impacts
+- `analyze_cascade_impact.py` - Heuristic calculator for treatment success probabilities
+- `run_baseline.py` - Baseline simulation runner
+- `run_cascade.py` - Full cascade analysis runner
+- `run_component_analysis.py` - Component analysis runner
+- `run_care_sensitivity.py` - Care-seeking sensitivity analysis
 - `tests/` - Comprehensive test suite
 - `data/` - Input data files
-- `figures/` - Output visualizations
-- `results_stochastic_extended/` - Saved simulation results
 
 ## Testing
 
@@ -210,10 +249,14 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ### What's new in 0.4.0
 
-- **Enhanced anemia tracking**: New `track_hmb_anemia()` analyzer monitors relationships between HMB and anemia, including stratified prevalence and counts
-- **Age-based HMB risk**: Implemented age-specific odds ratios for HMB susceptibility based on Tanzania study data
-- **School disruption modeling**: Added tracking of HMB-driven school disruptions with treatment-specific mitigation effects
-- **Analysis tools**: New `plot_analysis.py` module provides comprehensive baseline simulation visualization capabilities
+- **Modular intervention architecture**: Refactored monolithic intervention into standalone treatment classes (NSAIDTreatment, TXATreatment, PillTreatment, hIUDTreatment) with HMBCascade orchestrator
+- **Enhanced anemia tracking**: New `track_hmb_anemia()` analyzer monitors HMB-anemia relationships with stratified prevalence
+- **Critical bug fixes**:
+  - Fixed execution order to ensure interventions affect anemia outcomes (sequelae now calculated after interventions)
+  - Women can continue treatments that worked instead of being forced through cascade
+- **Treatment-specific adherence**: Use-at-will treatments (NSAIDs/TXA) use probabilistic discontinuation; continuous treatments (Pill/hIUD) use immediate cessation
+- **Component analysis tools**: New scripts for analyzing individual treatment impacts and cascade progression
+- **Comprehensive analyzers**: Track cascade depth, treatment progression, and care-seeking behavior
 
 ## License
 
