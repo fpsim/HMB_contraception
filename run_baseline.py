@@ -16,7 +16,6 @@ import fpsim as fp
 from menstruation import Menstruation
 from education import Education
 from analyzers import track_hmb_anemia
-from run_cascade import plot_baseline_characteristics
 
 
 # ============================================================================
@@ -51,6 +50,112 @@ def make_base_sim(seed=0):
 # ============================================================================
 # Plotting functions
 # ============================================================================
+
+def plot_sim(msim, save_dir='figures'):
+    """
+    Plot key baseline characteristics from simulation
+
+    Args:
+        msim: MultiSim object with baseline results
+        save_dir: Directory to save figures (default: 'figures')
+    """
+    sc.options(dpi=150)
+    sc.path(save_dir).mkdir(exist_ok=True)
+
+    # Extract results
+    sim = msim.sims[0]
+    tvec = sim.timevec
+    years = np.array([t.year + (t.month - 1) / 12 for t in tvec])
+
+    # Get mean and std across all runs
+    def get_stats(result_name):
+        data = np.array([s.results.menstruation[result_name] for s in msim.sims])
+        mean = data.mean(axis=0)
+        std = data.std(axis=0)
+        return mean, std
+
+    # Create figure with subplots
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    fig.suptitle('Baseline simulation characteristics (no intervention)', fontsize=16, y=0.995)
+
+    # 1. HMB prevalence
+    ax = axes[0, 0]
+    mean, std = get_stats('hmb_prev')
+    ax.plot(years, mean, color='#d62728', linewidth=2, label='Mean')
+    ax.fill_between(years, mean - std, mean + std, color='#d62728', alpha=0.3, label='±1 SD')
+    ax.set_xlabel('Year')
+    ax.set_ylabel('Prevalence')
+    ax.set_title('HMB prevalence')
+    ax.set_ylim([0, 1])
+    ax.legend(frameon=False)
+    ax.grid(alpha=0.3)
+
+    # 2. Anemia prevalence
+    ax = axes[0, 1]
+    mean, std = get_stats('anemic_prev')
+    ax.plot(years, mean, color='#ff7f0e', linewidth=2, label='Mean')
+    ax.fill_between(years, mean - std, mean + std, color='#ff7f0e', alpha=0.3, label='±1 SD')
+    ax.set_xlabel('Year')
+    ax.set_ylabel('Prevalence')
+    ax.set_title('Anemia prevalence')
+    ax.set_ylim([0, 1])
+    ax.legend(frameon=False)
+    ax.grid(alpha=0.3)
+
+    # 3. Cumulative anemia cases
+    ax = axes[0, 2]
+    mean, std = get_stats('n_anemia')
+    ax.plot(years, mean, color='#2ca02c', linewidth=2, label='Mean')
+    ax.fill_between(years, mean - std, mean + std, color='#2ca02c', alpha=0.3, label='±1 SD')
+    ax.set_xlabel('Year')
+    ax.set_ylabel('Cumulative cases')
+    ax.set_title('Cumulative anemia cases')
+    ax.legend(frameon=False)
+    ax.grid(alpha=0.3)
+
+    # 4. Menstrual pain prevalence
+    ax = axes[1, 0]
+    mean, std = get_stats('pain_prev')
+    ax.plot(years, mean, color='#9467bd', linewidth=2, label='Mean')
+    ax.fill_between(years, mean - std, mean + std, color='#9467bd', alpha=0.3, label='±1 SD')
+    ax.set_xlabel('Year')
+    ax.set_ylabel('Prevalence')
+    ax.set_title('Menstrual pain prevalence')
+    ax.set_ylim([0, 1])
+    ax.legend(frameon=False)
+    ax.grid(alpha=0.3)
+
+    # 5. Poor menstrual hygiene prevalence
+    ax = axes[1, 1]
+    mean, std = get_stats('poor_mh_prev')
+    ax.plot(years, mean, color='#8c564b', linewidth=2, label='Mean')
+    ax.fill_between(years, mean - std, mean + std, color='#8c564b', alpha=0.3, label='±1 SD')
+    ax.set_xlabel('Year')
+    ax.set_ylabel('Prevalence')
+    ax.set_title('Poor menstrual hygiene prevalence')
+    ax.set_ylim([0, 1])
+    ax.legend(frameon=False)
+    ax.grid(alpha=0.3)
+
+    # 6. Hysterectomy prevalence
+    ax = axes[1, 2]
+    mean, std = get_stats('hyst_prev')
+    ax.plot(years, mean, color='#e377c2', linewidth=2, label='Mean')
+    ax.fill_between(years, mean - std, mean + std, color='#e377c2', alpha=0.3, label='±1 SD')
+    ax.set_xlabel('Year')
+    ax.set_ylabel('Prevalence')
+    ax.set_title('Hysterectomy prevalence')
+    ax.set_ylim([0, 0.1])
+    ax.legend(frameon=False)
+    ax.grid(alpha=0.3)
+
+    plt.tight_layout()
+    filename = f'{save_dir}/baseline_characteristics.png'
+    sc.savefig(filename, dpi=150)
+    print(f'Saved baseline characteristics figure to {filename}')
+
+    return fig
+
 
 def plot_hmb_anemia_correlation(msim, save_dir='figures'):
     """
@@ -236,7 +341,7 @@ if __name__ == '__main__':
     msim_base.run()
 
     print('Generating baseline characteristics plot...')
-    plot_baseline_characteristics(msim_base)
+    plot_sim(msim_base)
 
     print('Generating HMB-anemia correlation plots...')
     plot_hmb_anemia_correlation(msim_base)

@@ -107,6 +107,7 @@ class Menstruation(ss.Connector):
 
             # HMB sequelae
             ss.BoolState('anemic'),
+            ss.FloatArr('dur_anemia', default=0),
             ss.BoolState('prev_anemic', default=False),
             ss.BoolState('poor_mh', label="Poor menstrual hygiene"),
             ss.BoolState('pain', label="Menstrual pain"),
@@ -335,7 +336,7 @@ class Menstruation(ss.Connector):
             self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.menstruating)
         for res in ['hyst', 'early_meno', 'premature_meno']:
             self.results[f'{res}_prev'][ti] = cond_prob(getattr(self, res), self.post_menarche)
-            
+
         # --- cumulative anemia cases per year ---
         mens = self.menstruating
         new_cases = (~self.prev_anemic) & self.anemic & mens
@@ -350,6 +351,15 @@ class Menstruation(ss.Connector):
 
         self.results.n_anemia[ti] = self._annual_anemia_cases
         self.prev_anemic[:] = self.anemic[:]
+
+        # --- increment anemia duration (in months) ---
+        # Increment duration for all currently anemic people
+        anemic_uids = self.anemic.uids
+        self.dur_anemia[anemic_uids] += 1
+
+        # Reset duration for people who recovered from anemia
+        recovered = (~self.anemic) & (self.dur_anemia > 0)
+        self.dur_anemia[recovered] = 0
 
         return
 

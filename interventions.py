@@ -32,13 +32,21 @@ class HMBTreatmentBase(ss.Intervention):
     effectiveness assessment, and adherence checking.
     """
 
-    def __init__(self, name, eligibility=None, **kwargs):
-        super().__init__(name=name, eligibility=eligibility, **kwargs)
+    def __init__(self, name, pars=None, eligibility=None, **kwargs):
+        super().__init__(name=name, eligibility=eligibility)
 
         # Store probabilities calculated within the module
         self._p_care = ss.bernoulli(p=0)
         self._p_accept = ss.bernoulli(p=0)
         self._p_adherent = ss.bernoulli(p=0)
+
+        # Handle parameters
+        self.define_pars(
+            care_seeking_dist=ss.normal(1, 1),  # Default distribution
+        )
+        self.update_pars(pars, **kwargs)
+
+        return 
 
     def _define_common_states(self):
         """
@@ -50,7 +58,7 @@ class HMBTreatmentBase(ss.Intervention):
         self.define_states(
             # Care seeking
             ss.BoolState('seeking_care'),
-            ss.FloatArr('care_seeking_propensity', default=ss.normal(1, 1)),
+            ss.FloatArr('care_seeking_propensity', default=self.pars.care_seeking_dist),
 
             # Treatment status
             ss.BoolState('on_treatment'),
@@ -308,7 +316,7 @@ class NSAIDTreatment(HMBTreatmentBase):
     """
 
     def __init__(self, pars=None, eligibility=None, **kwargs):
-        super().__init__(name='nsaid_treatment', eligibility=eligibility, **kwargs)
+        super().__init__(name='nsaid_treatment', eligibility=eligibility)
 
         self.define_pars(
             year=2020,
@@ -319,6 +327,7 @@ class NSAIDTreatment(HMBTreatmentBase):
                 anemic=1,
                 pain=0.25,
             ),
+            care_seeking_dist = ss.normal(1, 1),
 
             # Treatment parameters
             efficacy=0.5,  # 50% responder rate
@@ -357,7 +366,7 @@ class TXATreatment(HMBTreatmentBase):
     """
 
     def __init__(self, pars=None, eligibility=None, **kwargs):
-        super().__init__(name='txa_treatment', eligibility=eligibility, **kwargs)
+        super().__init__(name='txa_treatment', eligibility=eligibility)
 
         self.define_pars(
             year=2020,
@@ -368,6 +377,7 @@ class TXATreatment(HMBTreatmentBase):
                 anemic=1,
                 pain=0.25,
             ),
+            care_seeking_dist = ss.normal(1, 1),
 
             # Treatment parameters
             efficacy=0.6,  # 60% responder rate
@@ -404,7 +414,7 @@ class PillTreatment(HMBTreatmentBase):
     """
 
     def __init__(self, pars=None, eligibility=None, **kwargs):
-        super().__init__(name='pill_treatment', eligibility=eligibility, **kwargs)
+        super().__init__(name='pill_treatment', eligibility=eligibility)
 
         self.define_pars(
             year=2020,
@@ -414,6 +424,7 @@ class PillTreatment(HMBTreatmentBase):
                 anemic=1,
                 pain=0.25,
             ),
+            care_seeking_dist = ss.normal(1, 1),
 
             efficacy=0.7,
             adherence=0.75,
@@ -470,7 +481,7 @@ class hIUDTreatment(HMBTreatmentBase):
     """
 
     def __init__(self, pars=None, eligibility=None, **kwargs):
-        super().__init__(name='hiud_treatment', eligibility=eligibility, **kwargs)
+        super().__init__(name='hiud_treatment', eligibility=eligibility)
 
         self.define_pars(
             year=2020,
@@ -480,6 +491,7 @@ class hIUDTreatment(HMBTreatmentBase):
                 anemic=1,
                 pain=0.25,
             ),
+            care_seeking_dist = ss.normal(1, 1),
 
             efficacy=0.8,
             adherence=0.85,
@@ -598,12 +610,13 @@ class HMBCascade(ss.Intervention):
                 anemic=1,
                 pain=0.25,
             ),
+            care_seeking_dist = ss.normal(1, 1),
         )
-
         self.update_pars(pars, **kwargs)
 
         # Treatment components will be added during initialization
         self.treatments = {}
+        return
 
     def init_pre(self, sim):
         """Initialize treatment components with eligibility functions."""
@@ -619,6 +632,7 @@ class HMBCascade(ss.Intervention):
                 adherence=self.pars.nsaid.adherence,
                 prob_offer=self.pars.nsaid.prob_offer,
                 prob_accept=self.pars.nsaid.prob_accept,
+                care_seeking_dist=self.pars.care_seeking_dist,
             ),
         )
 
@@ -636,6 +650,7 @@ class HMBCascade(ss.Intervention):
                 adherence=self.pars.txa.adherence,
                 prob_offer=self.pars.txa.prob_offer,
                 prob_accept=self.pars.txa.prob_accept,
+                care_seeking_dist=self.pars.care_seeking_dist,
             ),
             eligibility=txa_eligibility,
         )
@@ -653,6 +668,7 @@ class HMBCascade(ss.Intervention):
                 adherence=self.pars.pill.adherence,
                 prob_offer=self.pars.pill.prob_offer,
                 prob_accept=self.pars.pill.prob_accept,
+                care_seeking_dist=self.pars.care_seeking_dist,                
             ),
             eligibility=pill_eligibility,
         )
@@ -672,6 +688,7 @@ class HMBCascade(ss.Intervention):
                 adherence=self.pars.hiud.adherence,
                 prob_offer=self.pars.hiud.prob_offer,
                 prob_accept=self.pars.hiud.prob_accept,
+                care_seeking_dist=self.pars.care_seeking_dist,
             ),
             eligibility=hiud_eligibility,
         )

@@ -14,7 +14,7 @@ import fpsim as fp
 from menstruation import Menstruation
 from education import Education
 from interventions import HMBCascade
-from analyzers import track_care_seeking, track_tx_eff, track_tx_dur, track_hmb_anemia, track_cascade
+from analyzers import track_care_seeking, track_tx_eff, track_tx_dur, track_hmb_anemia, track_cascade, track_anemia_duration
 
 
 # ============================================================================
@@ -66,6 +66,7 @@ def make_intervention_sim(seed=0):
     tx_dur_analyzer = track_tx_dur()
     hmb_anemia_analyzer = track_hmb_anemia()
     cascade_analyzer = track_cascade()
+    anemia_dur_analyzer = track_anemia_duration()
 
     sim = fp.Sim(
         start=2020,
@@ -76,7 +77,7 @@ def make_intervention_sim(seed=0):
         education_module=edu,
         connectors=[mens],
         interventions=[cascade],
-        analyzers=[care_analyzer, tx_eff_analyzer, tx_dur_analyzer, hmb_anemia_analyzer, cascade_analyzer],
+        analyzers=[care_analyzer, tx_eff_analyzer, tx_dur_analyzer, hmb_anemia_analyzer, cascade_analyzer, anemia_dur_analyzer],
         rand_seed=seed,
         verbose=0,
     )
@@ -131,112 +132,6 @@ def run_cascade_comparison(n_runs=10, save_results=True):
 # ============================================================================
 # Plotting functions
 # ============================================================================
-
-def plot_baseline_characteristics(msim, save_dir='figures'):
-    """
-    Plot key baseline characteristics from simulation
-
-    Args:
-        msim: MultiSim object with baseline results
-        save_dir: Directory to save figures (default: 'figures')
-    """
-    sc.options(dpi=150)
-    sc.path(save_dir).mkdir(exist_ok=True)
-
-    # Extract results
-    sim = msim.sims[0]
-    tvec = sim.timevec
-    years = np.array([t.year + (t.month - 1) / 12 for t in tvec])
-
-    # Get mean and std across all runs
-    def get_stats(result_name):
-        data = np.array([s.results.menstruation[result_name] for s in msim.sims])
-        mean = data.mean(axis=0)
-        std = data.std(axis=0)
-        return mean, std
-
-    # Create figure with subplots
-    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-    fig.suptitle('Baseline simulation characteristics (no intervention)', fontsize=16, y=0.995)
-
-    # 1. HMB prevalence
-    ax = axes[0, 0]
-    mean, std = get_stats('hmb_prev')
-    ax.plot(years, mean, color='#d62728', linewidth=2, label='Mean')
-    ax.fill_between(years, mean - std, mean + std, color='#d62728', alpha=0.3, label='±1 SD')
-    ax.set_xlabel('Year')
-    ax.set_ylabel('Prevalence')
-    ax.set_title('HMB prevalence')
-    ax.set_ylim([0, 1])
-    ax.legend(frameon=False)
-    ax.grid(alpha=0.3)
-
-    # 2. Anemia prevalence
-    ax = axes[0, 1]
-    mean, std = get_stats('anemic_prev')
-    ax.plot(years, mean, color='#ff7f0e', linewidth=2, label='Mean')
-    ax.fill_between(years, mean - std, mean + std, color='#ff7f0e', alpha=0.3, label='±1 SD')
-    ax.set_xlabel('Year')
-    ax.set_ylabel('Prevalence')
-    ax.set_title('Anemia prevalence')
-    ax.set_ylim([0, 1])
-    ax.legend(frameon=False)
-    ax.grid(alpha=0.3)
-
-    # 3. Cumulative anemia cases
-    ax = axes[0, 2]
-    mean, std = get_stats('n_anemia')
-    ax.plot(years, mean, color='#2ca02c', linewidth=2, label='Mean')
-    ax.fill_between(years, mean - std, mean + std, color='#2ca02c', alpha=0.3, label='±1 SD')
-    ax.set_xlabel('Year')
-    ax.set_ylabel('Cumulative cases')
-    ax.set_title('Cumulative anemia cases')
-    ax.legend(frameon=False)
-    ax.grid(alpha=0.3)
-
-    # 4. Menstrual pain prevalence
-    ax = axes[1, 0]
-    mean, std = get_stats('pain_prev')
-    ax.plot(years, mean, color='#9467bd', linewidth=2, label='Mean')
-    ax.fill_between(years, mean - std, mean + std, color='#9467bd', alpha=0.3, label='±1 SD')
-    ax.set_xlabel('Year')
-    ax.set_ylabel('Prevalence')
-    ax.set_title('Menstrual pain prevalence')
-    ax.set_ylim([0, 1])
-    ax.legend(frameon=False)
-    ax.grid(alpha=0.3)
-
-    # 5. Poor menstrual hygiene prevalence
-    ax = axes[1, 1]
-    mean, std = get_stats('poor_mh_prev')
-    ax.plot(years, mean, color='#8c564b', linewidth=2, label='Mean')
-    ax.fill_between(years, mean - std, mean + std, color='#8c564b', alpha=0.3, label='±1 SD')
-    ax.set_xlabel('Year')
-    ax.set_ylabel('Prevalence')
-    ax.set_title('Poor menstrual hygiene prevalence')
-    ax.set_ylim([0, 1])
-    ax.legend(frameon=False)
-    ax.grid(alpha=0.3)
-
-    # 6. Hysterectomy prevalence
-    ax = axes[1, 2]
-    mean, std = get_stats('hyst_prev')
-    ax.plot(years, mean, color='#e377c2', linewidth=2, label='Mean')
-    ax.fill_between(years, mean - std, mean + std, color='#e377c2', alpha=0.3, label='±1 SD')
-    ax.set_xlabel('Year')
-    ax.set_ylabel('Prevalence')
-    ax.set_title('Hysterectomy prevalence')
-    ax.set_ylim([0, 0.1])
-    ax.legend(frameon=False)
-    ax.grid(alpha=0.3)
-
-    plt.tight_layout()
-    filename = f'{save_dir}/baseline_characteristics.png'
-    sc.savefig(filename, dpi=150)
-    print(f'Saved baseline characteristics figure to {filename}')
-
-    return fig
-
 
 def plot_intervention_impact(msim_base, msim_intv, msim_iud=None, save_dir='figures'):
     """
@@ -429,8 +324,8 @@ def plot_cascade_analysis(intervention_sim, save_dir='figures'):
 
     # Get cascade analyzer (should be the last analyzer)
     cascade = None
-    for analyzer in intervention_sim.analyzers:
-        if hasattr(analyzer, 'results') and 'offered_nsaid' in analyzer.results:
+    for analyzer in intervention_sim.analyzers.values():
+        if hasattr(analyzer, 'results') and hasattr(analyzer.results, 'offered_nsaid'):
             cascade = analyzer
             break
 
@@ -444,45 +339,71 @@ def plot_cascade_analysis(intervention_sim, save_dir='figures'):
 
     final_ti = -1
 
-    # 1. Number of treatments tried
+    # 1. Cascade progression by population
     ax = axes[0, 0]
-    n_tried = {
-        0: cascade.results.n_tried_0_tx[final_ti],
-        1: cascade.results.n_tried_1_tx[final_ti],
-        2: cascade.results.n_tried_2_tx[final_ti],
-        3: cascade.results.n_tried_3_tx[final_ti],
-        4: cascade.results.n_tried_4_tx[final_ti],
-    }
-    prop_tried = {
-        0: cascade.results.prop_tried_0_tx[final_ti],
-        1: cascade.results.prop_tried_1_tx[final_ti],
-        2: cascade.results.prop_tried_2_tx[final_ti],
-        3: cascade.results.prop_tried_3_tx[final_ti],
-        4: cascade.results.prop_tried_4_tx[final_ti],
-    }
 
-    treatments_tried = list(n_tried.keys())
-    n_values = list(n_tried.values())
+    # Get states from simulation
+    sim = intervention_sim
+    menstruation = sim.people.menstruation
+    anemic = menstruation.anemic
+    hmb = menstruation.hmb
+    menstruating = menstruation.menstruating
 
-    ax.bar(treatments_tried, n_values, color='steelblue', alpha=0.7)
+    # Get number of treatments tried per person
+    cascade_intv = sim.interventions.hmb_cascade
+    n_treatments = (
+        np.array(cascade_intv.tried_nsaid, dtype=int) +
+        np.array(cascade_intv.tried_txa, dtype=int) +
+        np.array(cascade_intv.tried_pill, dtype=int) +
+        np.array(cascade_intv.tried_hiud, dtype=int)
+    )
+
+    # Define populations
+    pop_all = menstruating
+    pop_anemic = anemic & menstruating
+    pop_hmb_no_anemia = hmb & ~anemic & menstruating
+
+    # Calculate distributions for each population
+    def get_cascade_dist(population):
+        """Get distribution of treatments tried for a population"""
+        dist = []
+        total = np.count_nonzero(population)
+        if total == 0:
+            return [0, 0, 0, 0, 0]
+        for n in range(5):
+            count = np.count_nonzero((n_treatments == n) & population)
+            dist.append(100 * count / total)
+        return dist
+
+    dist_all = get_cascade_dist(pop_all)
+    dist_anemic = get_cascade_dist(pop_anemic)
+    dist_hmb_no_anemia = get_cascade_dist(pop_hmb_no_anemia)
+
+    # Plot grouped bars
+    treatments_tried = np.arange(5)
+    width = 0.25
+    x = treatments_tried
+
+    ax.bar(x - width, dist_all, width, label='All women', color='steelblue', alpha=0.7)
+    ax.bar(x, dist_anemic, width, label='Anemic', color='#d62728', alpha=0.7)
+    ax.bar(x + width, dist_hmb_no_anemia, width, label='HMB, no anemia', color='#ff7f0e', alpha=0.7)
+
     ax.set_xlabel('Number of treatments tried')
-    ax.set_ylabel('Number of women')
-    ax.set_title('Cascade depth distribution')
+    ax.set_ylabel('Percentage of population (%)')
+    ax.set_title('Cascade progression by population')
+    ax.set_xticks(treatments_tried)
+    ax.set_xticklabels(['0', '1', '2', '3', '4'])
+    ax.legend(frameon=False, loc='upper right')
+    ax.set_ylim(0, max(max(dist_all), max(dist_anemic), max(dist_hmb_no_anemia)) * 1.15)
     ax.grid(axis='y', alpha=0.3)
-
-    # Add percentages on bars
-    for i, v in enumerate(n_values):
-        if v > 0:
-            pct = prop_tried[i] * 100
-            ax.text(i, v, f'{pct:.1f}%', ha='center', va='bottom', fontweight='bold')
 
     # 2. Cascade dropoffs
     ax = axes[0, 1]
     treatments = ['nsaid', 'txa', 'pill', 'hiud']
     treatment_labels = ['NSAID', 'TXA', 'Pill', 'hIUD']
 
-    offered = [cascade.results[f'offered_{tx}'][final_ti] for tx in treatments]
-    accepted = [cascade.results[f'accepted_{tx}'][final_ti] for tx in treatments]
+    offered = [getattr(cascade.results, f'offered_{tx}')[final_ti] for tx in treatments]
+    accepted = [getattr(cascade.results, f'accepted_{tx}')[final_ti] for tx in treatments]
 
     x = np.arange(len(treatments))
     width = 0.35
@@ -513,27 +434,42 @@ def plot_cascade_analysis(intervention_sim, save_dir='figures'):
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
 
-    # 4. Anemia prevalence by cascade depth
+    # 4. Time with anemia by cascade depth
     ax = axes[1, 1]
     cascade_depths = [0, 1, 2, 3, 4]
-    anemia_prev = [
-        cascade.results.anemia_tried_0[final_ti] * 100,
-        cascade.results.anemia_tried_1[final_ti] * 100,
-        cascade.results.anemia_tried_2[final_ti] * 100,
-        cascade.results.anemia_tried_3[final_ti] * 100,
-        cascade.results.anemia_tried_4[final_ti] * 100,
-    ]
 
-    ax.plot(cascade_depths, anemia_prev, marker='o', linewidth=2, markersize=10, color='darkred')
-    ax.set_xlabel('Number of treatments tried')
-    ax.set_ylabel('Anemia prevalence (%)')
-    ax.set_title('Anemia by cascade depth')
-    ax.grid(alpha=0.3)
+    # Get anemia duration analyzer
+    anemia_dur_analyzer = None
+    for analyzer in intervention_sim.analyzers.values():
+        if hasattr(analyzer, 'results') and hasattr(analyzer.results, 'mean_dur_anemia_tried_0'):
+            anemia_dur_analyzer = analyzer
+            break
 
-    # Add value labels
-    for i, v in enumerate(anemia_prev):
-        if v > 0:
-            ax.text(i, v + 1, f'{v:.1f}%', ha='center', va='bottom', fontweight='bold')
+    if anemia_dur_analyzer is not None:
+        # Get average time with anemia at final timestep
+        mean_durations = [
+            anemia_dur_analyzer.results.mean_dur_anemia_tried_0[final_ti],
+            anemia_dur_analyzer.results.mean_dur_anemia_tried_1[final_ti],
+            anemia_dur_analyzer.results.mean_dur_anemia_tried_2[final_ti],
+            anemia_dur_analyzer.results.mean_dur_anemia_tried_3[final_ti],
+            anemia_dur_analyzer.results.mean_dur_anemia_tried_4[final_ti],
+        ]
+
+        ax.bar(cascade_depths, mean_durations, width=0.6, color='darkred', alpha=0.7)
+        ax.set_xlabel('Number of treatments tried')
+        ax.set_ylabel('Average time with anemia (months)')
+        ax.set_title('Cumulative time with HMB-related anemia\nby cascade depth')
+        ax.set_xticks(cascade_depths)
+        ax.set_xticklabels(['0', '1', '2', '3', '4'])
+        ax.grid(axis='y', alpha=0.3)
+
+        # Add value labels
+        for i, v in enumerate(mean_durations):
+            if v > 0:
+                ax.text(i, v + 0.2, f'{v:.1f}', ha='center', va='bottom', fontweight='bold')
+    else:
+        ax.text(0.5, 0.5, 'Anemia duration analyzer not found', ha='center', va='center',
+                transform=ax.transAxes)
 
     plt.tight_layout()
 
@@ -552,14 +488,21 @@ if __name__ == '__main__':
     # Configuration
     n_runs = 10  # Number of stochastic runs per scenario
 
-    # Run simulations
-    results = run_cascade_comparison(n_runs=n_runs, save_results=True)
-    msim_base = results['baseline']
-    msim_intv = results['intervention']
+    # Check if results already exist
+    try:
+        print('Checking for existing results...')
+        msim_base = sc.loadobj('results/baseline_msim.obj')
+        msim_intv = sc.loadobcj('results/intervention_msim.obj', )
+        print('Found existing results! Loading from disk...\n')
+    except:
+        print('No existing results found. Running new simulations...\n')
+        # Run simulations (this will take some time)
+        results = run_cascade_comparison(n_runs=n_runs, save_results=True)
+        msim_base = results['baseline']
+        msim_intv = results['intervention']
 
     # Generate plots
     print('\nGenerating plots...')
-    plot_baseline_characteristics(msim_base)
     plot_intervention_impact(msim_base, msim_intv)
 
     # Plot cascade from first intervention sim

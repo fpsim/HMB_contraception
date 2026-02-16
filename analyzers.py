@@ -869,3 +869,122 @@ class track_care_propensity_effects(ss.Analyzer):
             self.final_n_treatments[q] = np.mean(self.results[f'n_treatments_q{q}'][-12:])
 
         return
+
+
+class track_anemia_duration(ss.Analyzer):
+    """
+    Track cumulative time spent with HMB-related anemia by cascade depth.
+
+    This analyzer tracks the average duration (in months) that women with HMB
+    have spent anemic, stratified by how many treatments they've tried.
+
+    The analyzer measures:
+    - Mean time with anemia for HMB women at each cascade depth (0-4 treatments)
+    - Total person-months of anemia by cascade depth
+    - Number of HMB women at each cascade depth
+
+    This helps answer: "Do women who progress through more treatments spend
+    less time being anemic overall?"
+
+    Requires:
+    - sim.people.menstruation with states: anemic, hmb, menstruating, dur_anemia
+    - sim.interventions.hmb_cascade
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        return
+
+    def init_results(self):
+        """Initialize results storage"""
+        super().init_results()
+
+        results = [
+            # Average duration with anemia by cascade depth
+            ss.Result('mean_dur_anemia_tried_0', scale=False, label="Mean months with anemia (0 treatments)"),
+            ss.Result('mean_dur_anemia_tried_1', scale=False, label="Mean months with anemia (1 treatment)"),
+            ss.Result('mean_dur_anemia_tried_2', scale=False, label="Mean months with anemia (2 treatments)"),
+            ss.Result('mean_dur_anemia_tried_3', scale=False, label="Mean months with anemia (3 treatments)"),
+            ss.Result('mean_dur_anemia_tried_4', scale=False, label="Mean months with anemia (4 treatments)"),
+
+            # Total person-months with anemia by cascade depth
+            ss.Result('total_dur_anemia_tried_0', scale=True, label="Total person-months anemia (0 treatments)"),
+            ss.Result('total_dur_anemia_tried_1', scale=True, label="Total person-months anemia (1 treatment)"),
+            ss.Result('total_dur_anemia_tried_2', scale=True, label="Total person-months anemia (2 treatments)"),
+            ss.Result('total_dur_anemia_tried_3', scale=True, label="Total person-months anemia (3 treatments)"),
+            ss.Result('total_dur_anemia_tried_4', scale=True, label="Total person-months anemia (4 treatments)"),
+
+            # Number of HMB women at each cascade depth
+            ss.Result('n_hmb_tried_0', scale=True, label="HMB women (0 treatments)"),
+            ss.Result('n_hmb_tried_1', scale=True, label="HMB women (1 treatment)"),
+            ss.Result('n_hmb_tried_2', scale=True, label="HMB women (2 treatments)"),
+            ss.Result('n_hmb_tried_3', scale=True, label="HMB women (3 treatments)"),
+            ss.Result('n_hmb_tried_4', scale=True, label="HMB women (4 treatments)"),
+        ]
+
+        self.define_results(*results)
+        return
+
+    def step(self):
+        """Calculate anemia duration metrics at this timestep"""
+        ti = self.sim.ti
+
+        # Get the cascade intervention
+        try:
+            cascade = self.sim.interventions.hmb_cascade
+        except:
+            if not hasattr(self, '_warned'):
+                print("Warning: track_anemia_duration requires HMBCascade intervention - skipping")
+                self._warned = True
+            return
+
+        # Get relevant states
+        menstruation = self.sim.people.menstruation
+        hmb = menstruation.hmb
+        menstruating = menstruation.menstruating
+        dur_anemia = menstruation.dur_anemia
+
+        # Calculate number of treatments tried per person
+        n_treatments = (
+            np.array(cascade.tried_nsaid, dtype=int) +
+            np.array(cascade.tried_txa, dtype=int) +
+            np.array(cascade.tried_pill, dtype=int) +
+            np.array(cascade.tried_hiud, dtype=int)
+        )
+
+        # For each cascade depth, calculate metrics among HMB women
+        for n in range(5):
+            # Get HMB women who have tried N treatments
+            hmb_tried_n = (n_treatments == n) & hmb & menstruating
+            n_hmb = np.count_nonzero(hmb_tried_n)
+
+            # Store number of HMB women at this depth
+            self.results[f'n_hmb_tried_{n}'][ti] = n_hmb
+
+            if n_hmb > 0:
+                # Get their anemia durations
+                durations = dur_anemia[hmb_tried_n]
+
+                # Calculate mean duration
+                mean_dur = np.mean(durations)
+                self.results[f'mean_dur_anemia_tried_{n}'][ti] = mean_dur
+
+                # Calculate total person-months
+                total_dur = np.sum(durations)
+                self.results[f'total_dur_anemia_tried_{n}'][ti] = total_dur
+            else:
+                self.results[f'mean_dur_anemia_tried_{n}'][ti] = 0
+                self.results[f'total_dur_anemia_tried_{n}'][ti] = 0
+
+        return
+
+    def finalize(self):
+        """Calculate final summary statistics"""
+        super().finalize()
+
+        # Calculate final mean durations (average over last 12 months to smooth noise)
+        self.final_mean_durations = {}
+        for n in range(5):
+            self.final_mean_durations[n] = np.mean(self.results[f'mean_dur_anemia_tried_{n}'][-12:])
+
+        return
