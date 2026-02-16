@@ -16,7 +16,7 @@ import sciris as sc
 
 from menstruation import Menstruation
 from education import Education
-from hmb_cascade import HMBCascade
+from interventions import HMBCascade
 from analyzers import track_care_seeking, track_tx_eff, track_tx_dur, track_care_propensity_effects
 
 

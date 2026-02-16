@@ -13,7 +13,7 @@ import fpsim as fp
 
 from menstruation import Menstruation
 from education import Education
-from hmb_cascade import HMBCascade
+from interventions import HMBCascade
 from analyzers import track_care_seeking, track_tx_eff, track_tx_dur, track_hmb_anemia, track_cascade
 
 
