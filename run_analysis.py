@@ -14,7 +14,7 @@ import fpsim as fp
 from menstruation import Menstruation
 from education import Education
 from interventions import HMBCarePathway
-from analyzers import track_care_seeking, track_tx_eff, track_tx_dur, track_hmb_anemia
+from analyzers import track_care_seeking, track_tx_eff, track_tx_dur, track_hmb_anemia, track_cascade
 
 
 def make_base_sim(seed=0):
@@ -163,9 +163,106 @@ def run_scenarios(n_runs=10, save_results=True):
     }
 
 
+def make_cascade_base_sim(seed=0):
+    """
+    Create baseline simulation for cascade analysis (no intervention)
+
+    Returns a simulation without cascade analyzer since there's no treatment cascade
+    """
+    mens = Menstruation()
+    edu = Education()
+    hmb_anemia_analyzer = track_hmb_anemia()
+
+    sim = fp.Sim(
+        start=2020,
+        stop=2030,
+        n_agents=5000,
+        total_pop=55_000_000,
+        location='kenya',
+        education_module=edu,
+        connectors=[mens],
+        analyzers=[hmb_anemia_analyzer],
+        rand_seed=seed,
+        verbose=0,
+    )
+    return sim
+
+
+def make_cascade_intervention_sim(seed=0):
+    """
+    Create simulation with HMB care pathway and cascade analyzer
+
+    Returns a simulation with full pathway and detailed cascade tracking
+    """
+    mens = Menstruation()
+    edu = Education()
+    pathway = HMBCarePathway(
+        year=2020,
+        time_to_assess=3,
+    )
+    cascade_analyzer = track_cascade()
+    hmb_anemia_analyzer = track_hmb_anemia()
+
+    sim = fp.Sim(
+        start=2020,
+        stop=2030,
+        n_agents=5000,
+        total_pop=55_000_000,
+        location='kenya',
+        education_module=edu,
+        connectors=[mens],
+        interventions=[pathway],
+        analyzers=[cascade_analyzer, hmb_anemia_analyzer],
+        rand_seed=seed,
+        verbose=0,
+    )
+    return sim
+
+
+def run_cascade_analysis(save_results=True):
+    """
+    Run baseline and intervention for cascade analysis
+
+    Args:
+        save_results: Whether to save results to disk (default: True)
+
+    Returns:
+        Dictionary with 'baseline' and 'intervention' Sim objects
+    """
+    print('Running cascade analysis...')
+
+    # Run baseline
+    print('Running baseline simulation...')
+    baseline_sim = make_cascade_base_sim(seed=0)
+    baseline_sim.run()
+
+    # Run intervention with cascade tracking
+    print('Running intervention simulation...')
+    intervention_sim = make_cascade_intervention_sim(seed=0)
+    intervention_sim.run()
+
+    # Save results
+    if save_results:
+        print('Saving cascade analysis results...')
+        sc.path('results').mkdir(exist_ok=True)
+        sc.saveobj('results/cascade_baseline_sim.obj', baseline_sim)
+        sc.saveobj('results/cascade_intervention_sim.obj', intervention_sim)
+        print('Results saved to results/cascade_*.obj')
+
+    print('Cascade analysis complete!')
+
+    return {
+        'baseline': baseline_sim,
+        'intervention': intervention_sim,
+    }
+
+
 if __name__ == '__main__':
     # Configuration
     n_runs = 10  # Number of stochastic runs per scenario
 
     # Run scenarios
     results = run_scenarios(n_runs=n_runs, save_results=True)
+
+    # Run cascade analysis
+    cascade_results = run_cascade_analysis(save_results=True)

@@ -413,7 +413,7 @@ class HMBCarePathway(ss.Intervention):
             self.define_pars(
                 year=2026,  # When intervention starts
             
-                # Care-seeking behavior
+                # Care-seeking behavior: logistic regression
                 care_behavior=sc.objdict(  # Parameters for poor menstrual hygiene
                     base = 0.5,  # Baseline 50% odds of seeking care
                     anemic = 1,  # Increased care-seeking behavior for those with anemia - placeholder
@@ -468,6 +468,7 @@ class HMBCarePathway(ss.Intervention):
 
             # Store probabilities that will be calculated within the module
             self._p_care = ss.bernoulli(p=0)
+            self._p_accept = ss.bernoulli(p=0)
             self._p_adherent = ss.bernoulli(p=0)
 
             # Define states for tracking cascade
@@ -544,6 +545,25 @@ class HMBCarePathway(ss.Intervention):
             ]
             self.define_results(*results)
             return
+
+        def _calc_individualized_prob(self, uids, base_prob):
+            """
+            Calculate individualized probabilities incorporating care_seeking_propensity.
+
+            Uses logistic transformation to map base probability and individual
+            care-seeking propensity to a valid probability in [0,1].
+
+            Args:
+                uids: Array of UIDs
+                base_prob: Base probability (scalar between 0 and 1)
+
+            Returns:
+                Array of individualized probabilities for each UID
+            """
+            # Use logistic approach with care_seeking_propensity as intercept_scale
+            pars = sc.objdict(base=base_prob)
+            p = logistic(self, uids, pars, intercept_scale=self.care_seeking_propensity[uids])
+            return p
     
         @property
         def pill_idx(self):
@@ -699,21 +719,21 @@ class HMBCarePathway(ss.Intervention):
         
             # Get fertility intent from FPsim
             fertility_intent = self.sim.people.fp.fertility_intent
-            
-            # NSAID node
-            can_try_nsaid = uids & ~self.tried_nsaid
+
+            # NSAID node - first line treatment
+            can_try_nsaid = uids & ~self.tried_nsaid & ~self.on_treatment
             self._offer_and_start(can_try_nsaid, 'nsaid')
 
-            # TXA node
-            can_try_txa = uids & ~self.tried_txa
+            # TXA node - only if tried NSAID
+            can_try_txa = uids & ~self.tried_txa & ~self.on_treatment & self.tried_nsaid
             self._offer_and_start(can_try_txa, 'txa')
 
-            # Pill node - need to also check fertility intent
-            can_try_pill = uids & ~self.tried_pill & ~self.on_treatment & ~fertility_intent
+            # Pill node - only if tried NSAID and TXA, and no fertility intent
+            can_try_pill = uids & ~self.tried_pill & ~self.on_treatment & self.tried_nsaid & self.tried_txa & ~fertility_intent
             self._offer_and_start(can_try_pill, 'pill')
 
-            # hIUD node - need to also check fertility intent
-            can_try_hiud = uids & ~self.tried_hiud & ~self.on_treatment & ~fertility_intent
+            # hIUD node - only if tried NSAID, TXA, and Pill, and no fertility intent
+            can_try_hiud = uids & ~self.tried_hiud & ~self.on_treatment & self.tried_nsaid & self.tried_txa & self.tried_pill & ~fertility_intent
             self._offer_and_start(can_try_hiud, 'hiud')
 
             # Exhausted or blocked → exit care pathway permanently?
@@ -727,9 +747,10 @@ class HMBCarePathway(ss.Intervention):
             Offer treatment to individuals and start for those who accept.
 
             Process:
-            1. Mark all as "tried" (even if not offered or accepted)
-            2. Randomly select who is offered based on prob_offer
-            3. Randomly select who accepts from those offered based on prob_accept
+            1. Randomly select who is offered based on prob_offer
+            2. Randomly select who accepts from those offered based on prob_accept
+               (incorporating care_seeking_propensity)
+            3. Mark acceptors as "tried" (was previously marking ALL as tried)
             4. Start treatment for those who accept
 
             Args:
@@ -737,25 +758,31 @@ class HMBCarePathway(ss.Intervention):
                 treatment_type: One of 'nsaid', 'txa', 'pill', 'hiud'
 
             Updates:
-                tried_{treatment_type}: All UIDs marked as tried
+                tried_{treatment_type}: Only for acceptors (FIXED: was marking all)
                 {treatment_type}_offered: Subset who were offered
                 {treatment_type}_accepted: Subset who accepted
                 Plus all states updated by _start_treatment for acceptors
             """
-            # Regardless of whether the treatment is offered/accepted, it's still recorded as "tried"
-            # Why is this??
-            getattr(self, f"tried_{treatment_type}")[uids] = True
-
             # See who's offered the treatment
             offered = self.pars.prob_offer[treatment_type].filter(uids)
             if len(offered):
                 getattr(self, f"{treatment_type}_offered")[offered] = True
-            
-            # See who accepts and start their treatment
-            accepted = self.pars.prob_accept[treatment_type].filter(offered)
-            if len(accepted):
-                getattr(self, f"{treatment_type}_accepted")[accepted] = True
-                self._start_treatment(accepted, treatment_type)  # this sets tried_*, on_treatment, and module flags
+
+            # Calculate individualized acceptance probabilities incorporating care_seeking_propensity
+            if len(offered):
+                base_accept_prob = self.pars.prob_accept[treatment_type].pars['p']
+                p_accept = self._calc_individualized_prob(offered, base_accept_prob)
+
+                # Use distribution defined in __init__ with individualized probabilities
+                self._p_accept.set(0)
+                self._p_accept.set(p_accept)
+                accepted = self._p_accept.filter(offered)
+
+                if len(accepted):
+                    getattr(self, f"{treatment_type}_accepted")[accepted] = True
+                    # Mark as tried ONLY for those who accepted (FIXED: was marking all UIDs as tried)
+                    getattr(self, f"tried_{treatment_type}")[accepted] = True
+                    self._start_treatment(accepted, treatment_type)  # this sets on_treatment and module flags
 
             return
 
@@ -782,7 +809,6 @@ class HMBCarePathway(ss.Intervention):
                 tx: Treatment type ('nsaid', 'txa', 'pill', 'hiud')
 
             Updates:
-                tried_{tx}: Marks as attempted
                 current_treatment: Sets to treatment code (1-4)
                 on_treatment: Set to True
                 ti_start_treatment: Records start time
@@ -798,10 +824,9 @@ class HMBCarePathway(ss.Intervention):
                     fp.on_contra: Set to True
                     fp.ever_used_contra: Set to True
                     fp.ti_contra: Set to stop time
+
+            Note: tried_{tx} is now marked in _offer_and_start, not here
             """
-            # Mark as tried
-            getattr(self, f"tried_{tx}")[uids] = True
-            
             # Set current treatment tracking
             self.current_treatment[uids] = self.treatment_map[tx]
             self.on_treatment[uids] = True
@@ -914,12 +939,14 @@ class HMBCarePathway(ss.Intervention):
         def check_adherence(self, uids=None):
             """
             Check adherence for individuals currently on treatment.
-            Adherence probabilities are treatment-specific.
+            Adherence probabilities are treatment-specific and incorporate
+            care_seeking_propensity.
 
             Process:
             1. Get adherence probability for each individual's current treatment
-            2. Randomly determine adherence based on these probabilities
-            3. Non-adherent individuals scheduled to stop at next timestep
+            2. Adjust probability based on care_seeking_propensity
+            3. Randomly determine adherence based on these individualized probabilities
+            4. Non-adherent individuals scheduled to stop at next timestep
 
             Following pathway: Treatment effective? → Does she adhere? → Yes/No
 
@@ -935,20 +962,40 @@ class HMBCarePathway(ss.Intervention):
             """
             # Check adherence for those who are on treatment
             if uids is None: uids = self.on_treatment.uids
-        
+
             if len(uids) == 0:
                 return
 
-            # Calculate adherence probability (ugly!)         
-            adherence_prob = np.array([self.pars.adherence[idx] for idx in self.current_treatment[uids].astype(int)-1])
-            self._p_adherent.set(p=adherence_prob)
-            is_adherent = self._p_adherent.filter(uids)
-            self.adherent[is_adherent] = True
+            # Calculate individualized adherence probability for each treatment type
+            # Loop through each treatment type to handle them separately
+            all_adherent = []
 
-            # Non-adherent - stop 
+            for tx_name, tx_code in self.treatment_map.items():
+                if tx_name == 'none':
+                    continue
+
+                # Find people on this treatment
+                on_this_tx = uids & (self.current_treatment == tx_code)
+                if len(on_this_tx) == 0:
+                    continue
+
+                # Get base adherence probability for this treatment
+                base_adherence = self.pars.adherence[tx_name]
+
+                # Calculate individualized probabilities incorporating care_seeking_propensity
+                p_adherent = self._calc_individualized_prob(on_this_tx, base_adherence)
+
+                # Use distribution defined in __init__ with individualized probabilities
+                self._p_adherent.set(0)
+                self._p_adherent.set(p_adherent)
+                is_adherent = self._p_adherent.filter(on_this_tx)
+                self.adherent[is_adherent] = True
+                all_adherent.append(is_adherent)
+
+            # Non-adherent - stop
             stoppers = uids & ~self.adherent
             self.ti_stop_treatment[stoppers] = self.ti + 1
-        
+
             return
     
         def stop_treatment(self, uids=None, success=False):

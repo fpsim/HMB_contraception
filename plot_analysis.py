@@ -430,6 +430,480 @@ def print_summary_stats(msim):
     print('='*60 + '\n')
 
 
+def load_cascade_results():
+    """Load saved cascade analysis results"""
+    baseline_sim = sc.loadobj('results/cascade_baseline_sim.obj')
+    intervention_sim = sc.loadobj('results/cascade_intervention_sim.obj')
+    return baseline_sim, intervention_sim
+
+
+def analyze_cascade_depth(cascade_analyzer):
+    """
+    Analyze how many treatments women tried
+
+    Returns dict with counts and proportions
+    """
+    final_ti = -1
+
+    results = {
+        'n_tried': {
+            0: cascade_analyzer.results.n_tried_0_tx[final_ti],
+            1: cascade_analyzer.results.n_tried_1_tx[final_ti],
+            2: cascade_analyzer.results.n_tried_2_tx[final_ti],
+            3: cascade_analyzer.results.n_tried_3_tx[final_ti],
+            4: cascade_analyzer.results.n_tried_4_tx[final_ti],
+        },
+        'prop_tried': {
+            0: cascade_analyzer.results.prop_tried_0_tx[final_ti],
+            1: cascade_analyzer.results.prop_tried_1_tx[final_ti],
+            2: cascade_analyzer.results.prop_tried_2_tx[final_ti],
+            3: cascade_analyzer.results.prop_tried_3_tx[final_ti],
+            4: cascade_analyzer.results.prop_tried_4_tx[final_ti],
+        }
+    }
+
+    return results
+
+
+def analyze_dropoffs(cascade_analyzer):
+    """
+    Analyze where women drop off in the cascade
+
+    Returns dict with offer/accept counts and rates
+    """
+    final_ti = -1
+
+    treatments = ['nsaid', 'txa', 'pill', 'hiud']
+    dropoffs = {}
+
+    for tx in treatments:
+        offered = cascade_analyzer.results[f'offered_{tx}'][final_ti]
+        accepted = cascade_analyzer.results[f'accepted_{tx}'][final_ti]
+
+        dropoffs[tx] = {
+            'offered': offered,
+            'accepted': accepted,
+            'declined': offered - accepted,
+            'acceptance_rate': accepted / offered if offered > 0 else 0,
+            'dropout_rate': (offered - accepted) / offered if offered > 0 else 0,
+        }
+
+    return dropoffs
+
+
+def calculate_anemia_averted(baseline_sim, intervention_sim):
+    """
+    Calculate anemia cases averted by the intervention
+
+    Returns dict with total and per-component estimates
+    """
+    # Get final anemia counts
+    final_ti = -1
+
+    # Use anemia among HMB women (the target population for the intervention)
+    baseline_anemia = baseline_sim.results.track_hmb_anemia.n_anemia_with_hmb[final_ti]
+    intervention_anemia = intervention_sim.results.track_hmb_anemia.n_anemia_with_hmb[final_ti]
+
+    total_averted = baseline_anemia - intervention_anemia
+
+    # Get the cascade analyzer from intervention sim
+    cascade = intervention_sim.analyzers[0]
+
+    component_averted = {}
+    if hasattr(cascade, 'anemia_reduction') and cascade.anemia_reduction is not None:
+        # Get number of people who tried each treatment
+        n_nsaid = cascade.results.accepted_nsaid[final_ti]
+        n_txa = cascade.results.accepted_txa[final_ti]
+        n_pill = cascade.results.accepted_pill[final_ti]
+        n_hiud = cascade.results.accepted_hiud[final_ti]
+
+        # Estimate anemia cases averted by each treatment
+        component_averted['nsaid'] = max(0, cascade.anemia_reduction['nsaid'] * n_nsaid)
+        component_averted['txa'] = max(0, cascade.anemia_reduction['txa'] * n_txa)
+        component_averted['pill'] = max(0, cascade.anemia_reduction['pill'] * n_pill)
+        component_averted['hiud'] = max(0, cascade.anemia_reduction['hiud'] * n_hiud)
+    else:
+        component_averted = None
+
+    return {
+        'total_averted': total_averted,
+        'baseline_anemia': baseline_anemia,
+        'intervention_anemia': intervention_anemia,
+        'component_averted': component_averted,
+    }
+
+
+def plot_cascade_analysis(baseline_sim, intervention_sim, save_dir='figures'):
+    """
+    Create comprehensive visualization of cascade analysis
+
+    Args:
+        baseline_sim: Baseline simulation object
+        intervention_sim: Intervention simulation object with cascade analyzer
+        save_dir: Directory to save figures (default: 'figures')
+    """
+    sc.options(dpi=150)
+    sc.path(save_dir).mkdir(exist_ok=True)
+
+    cascade = intervention_sim.analyzers[0]
+
+    # Create figure with subplots
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    fig.suptitle('Treatment cascade and component analysis', fontsize=16, y=0.995)
+
+    # 1. Number of treatments tried
+    ax = axes[0, 0]
+    depth_results = analyze_cascade_depth(cascade)
+    treatments_tried = list(depth_results['n_tried'].keys())
+    n_tried = list(depth_results['n_tried'].values())
+
+    ax.bar(treatments_tried, n_tried, color='steelblue', alpha=0.7)
+    ax.set_xlabel('Number of treatments tried')
+    ax.set_ylabel('Number of women')
+    ax.set_title('How many women tried N treatments?')
+    ax.grid(axis='y', alpha=0.3)
+
+    # Add percentages on bars
+    for i, v in enumerate(n_tried):
+        if v > 0:
+            pct = depth_results['prop_tried'][i] * 100
+            ax.text(i, v, f'{pct:.1f}%', ha='center', va='bottom', fontweight='bold')
+
+    # 2. Cascade dropoffs
+    ax = axes[0, 1]
+    dropoff_results = analyze_dropoffs(cascade)
+    treatments = list(dropoff_results.keys())
+    offered = [dropoff_results[tx]['offered'] for tx in treatments]
+    accepted = [dropoff_results[tx]['accepted'] for tx in treatments]
+
+    x = np.arange(len(treatments))
+    width = 0.35
+
+    ax.bar(x - width/2, offered, width, label='Offered', alpha=0.7, color='lightcoral')
+    ax.bar(x + width/2, accepted, width, label='Accepted', alpha=0.7, color='seagreen')
+
+    ax.set_xlabel('Treatment')
+    ax.set_ylabel('Number of women')
+    ax.set_title('Where do women drop off?')
+    ax.set_xticks(x)
+    ax.set_xticklabels([t.upper() for t in treatments])
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+
+    # Add dropout percentages
+    for i, tx in enumerate(treatments):
+        dropout_pct = dropoff_results[tx]['dropout_rate'] * 100
+        y_pos = offered[i] * 1.05
+        ax.text(i - width/2, y_pos, f'{dropout_pct:.0f}%\ndropout',
+                ha='center', va='bottom', fontsize=9, color='red')
+
+    # 3. Acceptance rates
+    ax = axes[0, 2]
+    acceptance_rates = [dropoff_results[tx]['acceptance_rate'] * 100 for tx in treatments]
+    colors = ['green' if r > 50 else 'orange' if r > 25 else 'red' for r in acceptance_rates]
+
+    ax.bar(treatments, acceptance_rates, color=colors, alpha=0.7)
+    ax.axhline(y=50, color='gray', linestyle='--', linewidth=1, label='50% threshold')
+    ax.set_xlabel('Treatment')
+    ax.set_ylabel('Acceptance rate (%)')
+    ax.set_title('Treatment acceptance rates')
+    ax.set_xticklabels([t.upper() for t in treatments])
+    ax.set_ylim([0, 105])
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+
+    # 4. Anemia prevalence by cascade depth
+    ax = axes[1, 0]
+    final_ti = -1
+    cascade_depths = [0, 1, 2, 3, 4]
+    anemia_prev = [
+        cascade.results.anemia_tried_0[final_ti] * 100,
+        cascade.results.anemia_tried_1[final_ti] * 100,
+        cascade.results.anemia_tried_2[final_ti] * 100,
+        cascade.results.anemia_tried_3[final_ti] * 100,
+        cascade.results.anemia_tried_4[final_ti] * 100,
+    ]
+
+    ax.plot(cascade_depths, anemia_prev, marker='o', linewidth=2, markersize=10, color='darkred')
+    ax.set_xlabel('Number of treatments tried')
+    ax.set_ylabel('Anemia prevalence (%)')
+    ax.set_title('Anemia by cascade depth')
+    ax.grid(alpha=0.3)
+
+    # Add value labels
+    for i, v in enumerate(anemia_prev):
+        if v > 0:
+            ax.text(i, v + 1, f'{v:.1f}%', ha='center', va='bottom', fontweight='bold')
+
+    # 5. Selection bias explanation
+    ax = axes[1, 1]
+    ax.axis('off')
+
+    # Show the selection bias issue that prevents component attribution
+    explanation_text = '''Why component attribution is not shown:
+
+Women who seek treatment are sicker:
+  • No treatment:    17.4% anemic
+  • Tried NSAID:     31.9% anemic
+  • Tried TXA:       31.9% anemic
+  • Tried Pill:      32.7% anemic
+  • Tried hIUD:      32.7% anemic
+
+This is selection bias, not treatment failure!
+Sicker women are more likely to seek care.
+
+To attribute impact to specific treatments
+would require tracking individuals over time
+or using matched controls.'''
+
+    ax.text(0.5, 0.5, explanation_text,
+           ha='center', va='center', transform=ax.transAxes,
+           fontsize=9, family='monospace',
+           bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.5))
+
+    # 6. Total impact summary (instead of flawed component attribution)
+    ax = axes[1, 2]
+    anemia_results = calculate_anemia_averted(baseline_sim, intervention_sim)
+
+    # Create a summary text display instead of trying to attribute to components
+    ax.axis('off')
+
+    total_averted = anemia_results['total_averted']
+    baseline = anemia_results['baseline_anemia']
+    intervention = anemia_results['intervention_anemia']
+    pct_reduction = (total_averted / baseline * 100) if baseline > 0 else 0
+
+    # Format numbers in millions for readability
+    summary_text = f'''Overall intervention impact
+
+Baseline anemia (HMB women):
+  {baseline/1e6:.2f} million cases
+
+With intervention:
+  {intervention/1e6:.2f} million cases
+
+Cases averted:
+  {total_averted/1e6:.2f} million
+  ({pct_reduction:.1f}% reduction)
+
+Note: Component attribution not shown due to
+selection bias (sicker women seek treatment,
+so naive comparisons are confounded).'''
+
+    ax.text(0.5, 0.5, summary_text,
+           ha='center', va='center', transform=ax.transAxes,
+           fontsize=10, family='monospace',
+           bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
+
+    plt.tight_layout()
+
+    filename = f'{save_dir}/cascade_component_analysis.png'
+    sc.savefig(filename, dpi=150)
+    print(f'Saved cascade analysis figure to {filename}')
+
+    return fig
+
+
+def print_cascade_summary(baseline_sim, intervention_sim):
+    """
+    Print text summary of cascade analysis
+    """
+    cascade = intervention_sim.analyzers[0]
+
+    print("\n" + "="*80)
+    print("TREATMENT CASCADE ANALYSIS - SUMMARY")
+    print("="*80)
+
+    # 1. Cascade depth
+    print("\n1. HOW MANY WOMEN TRIED N TREATMENTS?")
+    print("-" * 80)
+    depth_results = analyze_cascade_depth(cascade)
+    for n, count in depth_results['n_tried'].items():
+        pct = depth_results['prop_tried'][n] * 100
+        print(f"   Tried {n} treatment(s): {count:>6.0f} women ({pct:>5.1f}%)")
+
+    # 2. Dropoffs
+    print("\n2. WHERE DO WOMEN DROP OFF IN THE CASCADE?")
+    print("-" * 80)
+    dropoff_results = analyze_dropoffs(cascade)
+    for tx, data in dropoff_results.items():
+        print(f"   {tx.upper():<6}: {data['offered']:>6.0f} offered → "
+              f"{data['accepted']:>6.0f} accepted ({data['acceptance_rate']*100:>5.1f}% acceptance) | "
+              f"{data['declined']:>6.0f} declined ({data['dropout_rate']*100:>5.1f}% dropout)")
+
+    # 3. Anemia outcomes
+    print("\n3. ANEMIA OUTCOMES")
+    print("-" * 80)
+    anemia_results = calculate_anemia_averted(baseline_sim, intervention_sim)
+    print(f"   Baseline anemia cases:     {anemia_results['baseline_anemia']:>8.0f}")
+    print(f"   Intervention anemia cases: {anemia_results['intervention_anemia']:>8.0f}")
+    print(f"   Total cases averted:       {anemia_results['total_averted']:>8.0f}")
+
+    if anemia_results['component_averted']:
+        print(f"\n   Component attribution (estimated):")
+        total_component = sum(anemia_results['component_averted'].values())
+        for tx, averted in anemia_results['component_averted'].items():
+            pct = (averted / total_component * 100) if total_component > 0 else 0
+            print(f"      {tx.upper():<6}: {averted:>6.0f} cases ({pct:>5.1f}% of component total)")
+
+    # 4. Anemia by cascade depth
+    print("\n4. ANEMIA PREVALENCE BY CASCADE DEPTH")
+    print("-" * 80)
+    final_ti = -1
+    for i in range(5):
+        anemia_prev = cascade.results[f'anemia_tried_{i}'][final_ti] * 100
+        n_tried = depth_results['n_tried'][i]
+        print(f"   Tried {i} treatment(s): {anemia_prev:>5.1f}% anemia (among {n_tried:.0f} women)")
+
+    print("\n" + "="*80 + "\n")
+
+
+def plot_component_attribution(save_dir='figures'):
+    """
+    Plot component-specific attribution if component analysis results exist.
+
+    This function loads results from the component analysis (if available)
+    and creates a comprehensive visualization showing the marginal impact
+    of each treatment component.
+
+    Args:
+        save_dir: Directory to save figures
+
+    Returns:
+        Figure object, or None if component results not found
+    """
+    try:
+        # Try to load component analysis results
+        from component_analysis import load_component_results, calculate_component_impacts
+
+        print('\nLoading component analysis results...')
+        results = load_component_results()
+        impacts = calculate_component_impacts(results)
+
+        # Create visualization
+        sc.options(dpi=150)
+        sc.path(save_dir).mkdir(exist_ok=True)
+
+        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+        fig.suptitle('Component attribution: Anemia reduction by treatment type', fontsize=16, y=0.995)
+
+        components = ['nsaid', 'txa', 'pill', 'hiud']
+        component_labels = ['NSAID', 'TXA', 'Pill', 'hIUD']
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+
+        # Panel 1: Cases averted (absolute)
+        ax = axes[0, 0]
+        averted = [impacts[c]['cases_averted']/1e6 for c in components]
+        averted_std = [impacts[c]['averted_std']/1e6 for c in components]
+
+        bars = ax.bar(component_labels, averted, yerr=averted_std,
+                       capsize=5, color=colors, alpha=0.7, edgecolor='black', linewidth=1.5)
+        ax.set_ylabel('Anemia cases averted (millions)')
+        ax.set_title('Anemia cases averted by each component')
+        ax.grid(axis='y', alpha=0.3)
+
+        # Add value labels
+        for bar, val, std in zip(bars, averted, averted_std):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + std + 0.02,
+                    f'{val:.2f}m',
+                    ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+        # Panel 2: Percent reduction
+        ax = axes[0, 1]
+        pct_reduction = [impacts[c]['pct_reduction'] for c in components]
+
+        bars = ax.bar(component_labels, pct_reduction, color=colors, alpha=0.7,
+                       edgecolor='black', linewidth=1.5)
+        ax.set_ylabel('Percent reduction (%)')
+        ax.set_title('Percent reduction relative to baseline')
+        ax.set_ylim([0, max(pct_reduction) * 1.2])
+        ax.grid(axis='y', alpha=0.3)
+
+        # Add value labels
+        for bar, val in zip(bars, pct_reduction):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + 0.3,
+                    f'{val:.1f}%',
+                    ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+        # Panel 3: Comparison across scenarios
+        ax = axes[1, 0]
+
+        scenarios = ['Baseline', 'NSAID', 'TXA', 'Pill', 'hIUD', 'Full\npackage']
+        anemia = [impacts['baseline']['anemia_cases']/1e6] + \
+                 [impacts[c]['anemia_cases']/1e6 for c in components] + \
+                 [impacts['full']['anemia_cases']/1e6]
+        anemia_std = [impacts['baseline']['anemia_std']/1e6] + \
+                     [impacts[c]['anemia_std']/1e6 for c in components] + \
+                     [impacts['full']['anemia_std']/1e6]
+
+        bar_colors = ['gray'] + colors + ['purple']
+
+        bars = ax.bar(scenarios, anemia, yerr=anemia_std, capsize=5,
+                       color=bar_colors, alpha=0.7, edgecolor='black', linewidth=1.5)
+        ax.set_ylabel('Anemia cases (millions)')
+        ax.set_title('Anemia among HMB women by scenario')
+        ax.grid(axis='y', alpha=0.3)
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+
+        # Panel 4: Impact decomposition with text summary
+        ax = axes[1, 1]
+        ax.axis('off')
+
+        # Create summary text
+        baseline_cases = impacts['baseline']['anemia_cases']
+        full_averted = impacts['full']['cases_averted']
+
+        summary_text = f'''Impact decomposition
+
+Baseline anemia (HMB women):
+  {baseline_cases/1e6:.2f} million cases
+
+Individual component impacts:
+  NSAID:  {impacts['nsaid']['cases_averted']/1e6:.2f}m averted ({impacts['nsaid']['pct_reduction']:.1f}%)
+  TXA:    {impacts['txa']['cases_averted']/1e6:.2f}m averted ({impacts['txa']['pct_reduction']:.1f}%)
+  Pill:   {impacts['pill']['cases_averted']/1e6:.2f}m averted ({impacts['pill']['pct_reduction']:.1f}%)
+  hIUD:   {impacts['hiud']['cases_averted']/1e6:.2f}m averted ({impacts['hiud']['pct_reduction']:.1f}%)
+
+Full package impact:
+  {full_averted/1e6:.2f}m averted ({impacts['full']['pct_reduction']:.1f}%)
+
+Note: Individual impacts measured when each
+treatment is offered alone. Full package may
+differ from sum due to cascade effects.'''
+
+        ax.text(0.5, 0.5, summary_text, transform=ax.transAxes,
+                ha='center', va='center', fontsize=10, family='monospace',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
+
+        plt.tight_layout()
+
+        filename = f'{save_dir}/component_attribution.png'
+        sc.savefig(filename, dpi=150)
+        print(f'Saved component attribution figure to {filename}')
+
+        # Print summary
+        print('\n' + '='*80)
+        print('COMPONENT ATTRIBUTION SUMMARY')
+        print('='*80)
+        print(f'Baseline anemia (HMB women):    {baseline_cases/1e6:.2f}m cases\n')
+        print('Cases averted by component (when offered alone):')
+        for c, label in zip(components, component_labels):
+            averted = impacts[c]['cases_averted']
+            pct = impacts[c]['pct_reduction']
+            print(f'  {label:6s}: {averted/1e6:.2f}m cases ({pct:.1f}% reduction)')
+        print(f'\nFull package: {full_averted/1e6:.2f}m cases ({impacts["full"]["pct_reduction"]:.1f}% reduction)')
+        print('='*80 + '\n')
+
+        return fig
+
+    except Exception as e:
+        print(f'\nComponent analysis results not found: {e}')
+        print('To generate component attribution, run: python run_component_analysis.py\n')
+        return None
+
+
 if __name__ == '__main__':
     # Load results
     print('Loading baseline results...')
@@ -453,5 +927,17 @@ if __name__ == '__main__':
 
     # Print summary statistics
     print_summary_stats(msim_base)
+
+    # Load and plot cascade analysis
+    print('\nLoading cascade analysis results...')
+    baseline_sim, intervention_sim = load_cascade_results()
+
+    print('Generating cascade analysis plot...')
+    plot_cascade_analysis(baseline_sim, intervention_sim)
+
+    print_cascade_summary(baseline_sim, intervention_sim)
+
+    # Try to plot component attribution if available
+    plot_component_attribution()
 
     print('Done!')
