@@ -16,6 +16,7 @@ import fpsim as fp
 from menstruation import Menstruation
 from education import Education
 from analyzers import track_hmb_anemia
+from run_cascade import plot_baseline_characteristics
 
 
 # ============================================================================
