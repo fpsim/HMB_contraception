@@ -593,9 +593,9 @@ class HMBCascade(ss.Intervention):
 
     Uses eligibility functions to ensure proper sequencing:
     - NSAID: First-line treatment for all HMB
-    - TXA: Offered only if tried NSAID
-    - Pill: Offered only if tried NSAID and TXA
-    - hIUD: Offered only if tried NSAID, TXA, and Pill
+    - TXA: Eligible if NSAID was not offered, declined, or tried NSAID
+    - Pill: Eligible if NSAID and TXA were each not offered, declined, or tried NSAID and TXA
+    - hIUD: Eligible if NSAID, TXA, and Pill were each not offered, declined, or tried NSAID and TXA and Pill
 
     Each treatment can also be used independently for component analysis.
     """
@@ -667,8 +667,8 @@ class HMBCascade(ss.Intervention):
 
         # Create TXA treatment (requires tried NSAID)
         def txa_eligibility(sim):
-            # Eligible if tried NSAID
-            return nsaid.tried_treatment
+            # Eligible if tried NSAID or offered but refused or not offered
+            return nsaid.tried_treatment | (nsaid.offered & ~nsaid.on_treatment) | ~nsaid.offered
 
         txa = TXATreatment(
             pars=dict(
@@ -685,8 +685,10 @@ class HMBCascade(ss.Intervention):
         )
 
         # Create pill treatment (requires tried NSAID and TXA)
-        def pill_eligibility(sim):
-            return nsaid.tried_treatment & txa.tried_treatment
+        def pill_eligibility(sim):        
+            nsaid_resolved = nsaid.tried_treatment  | (nsaid.offered & ~nsaid.accepted) | ~nsaid.offered 
+            txa_resolved   = txa.tried_treatment  | (txa.offered   & ~txa.accepted) | ~txa.offered   
+            return nsaid_resolved & txa_resolved   
 
         pill = PillTreatment(
             pars=dict(
@@ -704,9 +706,10 @@ class HMBCascade(ss.Intervention):
 
         # Create hIUD treatment (requires tried all previous treatments)
         def hiud_eligibility(sim):
-            return (nsaid.tried_treatment &
-                   txa.tried_treatment &
-                   pill.tried_treatment)
+            nsaid_resolved = nsaid.tried_treatment  | (nsaid.offered & ~nsaid.accepted) | ~nsaid.offered 
+            txa_resolved   = txa.tried_treatment | (txa.offered   & ~txa.accepted) | ~txa.offered   
+            pill_resolved  = pill.tried_treatment  | (pill.offered  & ~pill.accepted) | ~pill.offered 
+            return nsaid_resolved & txa_resolved & pill_resolved
 
         hiud = hIUDTreatment(
             pars=dict(
