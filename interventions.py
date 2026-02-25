@@ -68,6 +68,7 @@ class HMBTreatmentBase(ss.Intervention):
             ss.BoolState('tried_treatment'),
             ss.BoolState('offered'),
             ss.BoolState('accepted'),
+            ss.FloatArr('accept_propensity', default=float('nan')),  # drawn once at first offer, nan = never offered
 
             # Treatment response
             ss.BoolState('responder', default=ss.bernoulli(p=self.pars.efficacy)),
@@ -252,6 +253,7 @@ class HMBTreatmentBase(ss.Intervention):
         self.offer_treatment()
         self.assess_treatment_effectiveness()
         self.check_adherence()
+        self.check_continuation()
 
     def _pre_step_hook(self):
         """
@@ -270,7 +272,8 @@ class HMBTreatmentBase(ss.Intervention):
         1. Get care seekers
         2. Filter by eligibility (override _get_eligible_for_treatment for custom logic)
         3. Offer treatment (probabilistic)
-        4. Accept treatment (probabilistic, individualized)
+        4. Accept treatment (Each person's accept_propensity is compared against
+                             the treatment's prob_accept. If propensity < prob_accept, they accept.
         5. Start treatment
 
         Subclasses can override _get_eligible_for_treatment() to customize eligibility.
@@ -288,12 +291,25 @@ class HMBTreatmentBase(ss.Intervention):
             self.offered[offered] = True
 
             # Calculate individualized acceptance probability
-            base_accept_prob = self.pars.prob_accept.pars['p']
-            p_accept = self._calc_individualized_prob(offered, base_accept_prob)
+            # --- Initialize propensity for anyone who doesn't have one yet ---
+            unset = np.isnan(self.accept_propensity[offered])
+            if np.any(unset):
+                unset_uids = offered[unset]
+                self.accept_propensity[unset_uids] = np.random.uniform(
+                    0, 1, len(unset_uids)
+                )
 
-            self._p_accept.set(0)
-            self._p_accept.set(p_accept)
-            accepted = self._p_accept.filter(offered)
+            # --- Accept if propensity < prob_accept threshold ---
+            threshold = self.pars.prob_accept.pars['p']
+            accepts = self.accept_propensity[offered] < threshold
+            accepted = offered[accepts]
+            
+            # base_accept_prob = self.pars.prob_accept.pars['p']
+            # p_accept = self._calc_individualized_prob(offered, base_accept_prob)
+
+            # self._p_accept.set(0)
+            # self._p_accept.set(p_accept)
+            # accepted = self._p_accept.filter(offered)
 
             if len(accepted) > 0:
                 self.accepted[accepted] = True
@@ -323,6 +339,14 @@ class HMBTreatmentBase(ss.Intervention):
         """
         return care_seekers & (~self.tried_treatment | self.was_effective) & ~self.on_treatment
 
+    def check_continuation(self):
+        """
+        Hook for cycle-by-cycle continuation checks.
+    
+        Default is no-op. Overridden by NSAID and TXA.
+        Pill and hIUD do not use this (they follow FPsim duration).
+        """
+        pass
 
 # ============================================================================
 # Individual treatment classes
@@ -363,12 +387,23 @@ class NSAIDTreatment(HMBTreatmentBase):
             # NSAIDs are use-at-will (taken during menstruation only)
             use_at_will=True,
             p_discontinue_nonadherent=0.1,  # 10% chance per timestep of discontinuing when non-adherent
+            
+            # Continuation parameters
+            p_continue_first_cycle=0.6,    # No history yet
+            p_continue_if_resolved=0.9,    # HMB resolved last cycle
+            p_continue_if_persists=0.2,    # HMB persisted last cycle
+
         )
 
         self.update_pars(pars, **kwargs)
 
         # Define common states from base class
         self._define_common_states()
+        
+        #State for cycle-by-cycle continuation tracking
+        self.define_states(
+            ss.FloatArr('hmb_last_cycle', default=float('nan')),
+        )
 
     def _start_treatment(self, uids):
         """Start NSAID treatment for accepted individuals."""
@@ -380,8 +415,48 @@ class NSAIDTreatment(HMBTreatmentBase):
         # Set duration and stop time
         self.dur_treatment[uids] = self.pars.dur_treatment.rvs(uids)
         self.ti_stop_treatment[uids] = self.ti + self.dur_treatment[uids]
+        
+    def check_continuation(self):
+        """
+        Cycle-by-cycle continuation check for NSAIDs.
 
+        Each cycle, women on treatment decide whether to continue based on
+        whether HMB was resolved last cycle:
+          - First cycle (no history): p_continue_first_cycle
+          - HMB resolved last cycle:  p_continue_if_resolved
+          - HMB persisted last cycle: p_continue_if_persists
 
+        Those who discontinue have tried_treatment=True and become eligible
+        for the next treatment in the cascade via care-seeking
+        """
+        on_treatment_uids = self.on_treatment.uids
+        if len(on_treatment_uids) == 0:
+            return
+
+        hmb_this_cycle = self.sim.people.menstruation.hmb[on_treatment_uids]
+        last_cycle = self.hmb_last_cycle[on_treatment_uids]
+
+        p_continue = np.where(
+            np.isnan(last_cycle),
+            self.pars.p_continue_first_cycle,
+            np.where(
+                last_cycle == 1.0,
+                self.pars.p_continue_if_resolved,
+                self.pars.p_continue_if_persists,
+            )
+        )
+
+        continues = np.random.uniform(0, 1, len(on_treatment_uids)) < p_continue
+        stops = on_treatment_uids[~continues]
+
+        # Update last cycle tracking: 1.0 = resolved, 0.0 = persisted
+        self.hmb_last_cycle[on_treatment_uids] = (~hmb_this_cycle).astype(float)
+
+        if len(stops) > 0:
+            self.ti_stop_treatment[stops] = self.ti + 1
+            self.hmb_last_cycle[stops] = np.nan
+        
+        
 class TXATreatment(HMBTreatmentBase):
     """
     Tranexamic acid (TXA) treatment for HMB.
@@ -417,12 +492,24 @@ class TXATreatment(HMBTreatmentBase):
             # TXA is use-at-will (taken during menstruation only)
             use_at_will=True,
             p_discontinue_nonadherent=0.1,  # 10% chance per timestep of discontinuing when non-adherent
+            
+            # NEW: Continuation parameters
+            p_continue_first_cycle=0.6,
+            p_continue_if_resolved=0.9,
+            p_continue_if_persists=0.2,
+
         )
 
         self.update_pars(pars, **kwargs)
 
         # Define common states from base class
         self._define_common_states()
+        
+        # NEW: State for continuation tracking
+        self.define_states(
+            ss.FloatArr('hmb_last_cycle', default=float('nan')),
+            )
+
 
     def _start_treatment(self, uids):
         """Start TXA treatment."""
@@ -432,6 +519,38 @@ class TXATreatment(HMBTreatmentBase):
 
         self.dur_treatment[uids] = self.pars.dur_treatment.rvs(uids)
         self.ti_stop_treatment[uids] = self.ti + self.dur_treatment[uids]
+
+    def check_continuation(self):
+        """
+        Cycle-by-cycle continuation check for TXA.
+        same logic as NSAIDTreatment.check_continuation().
+        """
+        on_treatment_uids = self.on_treatment.uids
+        if len(on_treatment_uids) == 0:
+            return
+
+        hmb_this_cycle = self.sim.people.menstruation.hmb[on_treatment_uids]
+        last_cycle = self.hmb_last_cycle[on_treatment_uids]
+
+        p_continue = np.where(
+            np.isnan(last_cycle),
+            self.pars.p_continue_first_cycle,
+            np.where(
+                last_cycle == 1.0,
+                self.pars.p_continue_if_resolved,
+                self.pars.p_continue_if_persists,
+            )
+        )
+
+        continues = np.random.uniform(0, 1, len(on_treatment_uids)) < p_continue
+        stops = on_treatment_uids[~continues]
+
+        self.hmb_last_cycle[on_treatment_uids] = (~hmb_this_cycle).astype(float)
+
+        if len(stops) > 0:
+            self.ti_stop_treatment[stops] = self.ti + 1
+            self.hmb_last_cycle[stops] = np.nan
+
 
 
 class PillTreatment(HMBTreatmentBase):
