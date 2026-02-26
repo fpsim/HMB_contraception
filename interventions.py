@@ -368,9 +368,9 @@ class NSAIDTreatment(HMBTreatmentBase):
 
             # Care-seeking behavior
             care_behavior=sc.objdict(
-                base=0.5,
-                anemic=1,
-                pain=0.25,
+                base=0.2, #from McKinsey 2025 WHI portfolio sizing
+                anemic=0.86, #46% of women who reported 2+ HMB symptoms had every sought care for it (Fraser et al. 2015). The total log-odds to reach 46% is logit(0.46) − logit(base). I'll split it 70/30 in favor of anemia.
+                pain=0.37,
             ),
             care_seeking_dist = ss.normal(1, 1),
 
@@ -473,9 +473,9 @@ class TXATreatment(HMBTreatmentBase):
 
             # Care-seeking behavior
             care_behavior=sc.objdict(
-                base=0.5,
-                anemic=1,
-                pain=0.25,
+                base=0.2, #from McKinsey 2025 WHI portfolio sizing
+                anemic=0.86, #46% of women who reported 2+ HMB symptoms had every sought care for it (Fraser et al. 2015). The total log-odds to reach 46% is logit(0.46) − logit(base). I'll split it 70/30 in favor of anemia.
+                pain=0.37,
             ),
             care_seeking_dist = ss.normal(1, 1),
 
@@ -568,9 +568,9 @@ class PillTreatment(HMBTreatmentBase):
             year=2020,
 
             care_behavior=sc.objdict(
-                base=0.5,
-                anemic=1,
-                pain=0.25,
+                base=0.2, #from McKinsey 2025 WHI portfolio sizing
+                anemic=0.86, #46% of women who reported 2+ HMB symptoms had every sought care for it (Fraser et al. 2015). The total log-odds to reach 46% is logit(0.46) − logit(base). I'll split it 70/30 in favor of anemia.
+                pain=0.37,
             ),
             care_seeking_dist = ss.normal(1, 1),
 
@@ -635,9 +635,9 @@ class hIUDTreatment(HMBTreatmentBase):
             year=2020,
 
             care_behavior=sc.objdict(
-                base=0.5,
-                anemic=1,
-                pain=0.25,
+                base=0.2, #from McKinsey 2025 WHI portfolio sizing
+                anemic=0.86, #46% of women who reported 2+ HMB symptoms had every sought care for it (Fraser et al. 2015). The total log-odds to reach 46% is logit(0.46) − logit(base). I'll split it 70/30 in favor of anemia.
+                pain=0.37,
             ),
             care_seeking_dist = ss.normal(1, 1),
 
