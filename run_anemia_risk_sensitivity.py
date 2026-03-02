@@ -36,11 +36,11 @@ for d in [PLOTFOLDER, OUTFOLDER]:
 
 
 # ── Settings ───────────────────────────────────────────────────────────────────
-P_BASE   = 0.18   # baseline P(anemia | no HMB) – held fixed across scenarios
+P_BASE   = 0.215  # baseline P(anemia | no HMB) – held fixed across scenarios
 N_SEEDS  = 10     # stochastic runs per scenario
 START    = 2020
 STOP     = 2030
-INTV_YEAR = 2025  # year intervention begins
+INTV_YEAR = 2026  # year intervention begins
 
 # RR values derived from pooled OR 2.17 (95% CI: 1.09–4.31)
 rr_values = {
@@ -50,8 +50,8 @@ rr_values = {
 }
 rr_labels = {
     'low_rr':  'Low RR (1.07)',
-    'mid_rr':  'Mid RR (1.79)',
-    'high_rr': 'High RR (2.70)',
+    'mid_rr':  'Mid RR (1.73)',
+    'high_rr': 'High RR (2.50)',
 }
 rr_colors = {
     'low_rr':  '#2196F3',   # blue
@@ -143,7 +143,7 @@ def make_sim(rr, with_intervention=False, seed=0):
     sim_kwargs = dict(
         start=START,
         stop=STOP,
-        n_agents=5000,
+        n_agents=10000,
         total_pop=55_000_000,
         location='kenya',
         education_module=edu,
@@ -184,7 +184,11 @@ def run_sensitivity(force_rerun=True):
         return sc.loadobj(results_file)
 
     raw = {
-        rr_name: {'baseline': [], 'cascade': [], 'averted': []}
+        rr_name: {
+            'baseline': [], 'cascade': [], 'averted': [],
+            'baseline_monthly': [], 'cascade_monthly': [],
+            'baseline_hmb_monthly': [], 'cascade_hmb_monthly': [],
+        }
         for rr_name in rr_values
     }
 
@@ -211,6 +215,14 @@ def run_sensitivity(force_rerun=True):
             # n_anemia_total is monthly; sum within each year
             base_monthly    = s_base.results.track_hmb_anemia['n_anemia_total']
             cascade_monthly = s_cascade.results.track_hmb_anemia['n_anemia_total']
+            
+            raw[rr_name]['baseline_monthly'].append(np.asarray(base_monthly))
+            raw[rr_name]['cascade_monthly'].append(np.asarray(cascade_monthly))
+            
+            raw[rr_name]['baseline_hmb_monthly'].append(
+                np.asarray(s_base.results.track_hmb_anemia['n_anemia_with_hmb']))
+            raw[rr_name]['cascade_hmb_monthly'].append(
+                np.asarray(s_cascade.results.track_hmb_anemia['n_anemia_with_hmb']))
 
             base_annual    = _annualize(base_monthly)
             cascade_annual = _annualize(cascade_monthly)
@@ -276,6 +288,21 @@ def compute_stats(raw):
             'mean':  np.nanmean(pct,              axis=0),
             'lower': np.nanpercentile(pct,  2.5,  axis=0),
             'upper': np.nanpercentile(pct, 97.5,  axis=0),
+        }
+    return stats
+
+
+def compute_stats_hmb(raw):
+    stats = {}
+    for rr_name in rr_values:
+        base_arr    = np.array([_annualize(m) for m in raw[rr_name]['baseline_hmb_monthly']])
+        casc_arr    = np.array([_annualize(m) for m in raw[rr_name]['cascade_hmb_monthly']])
+        averted_arr = base_arr - casc_arr
+        pct = np.where(base_arr > 0, averted_arr / base_arr * 100, np.nan)
+        stats[rr_name] = {
+            'mean':  np.nanmean(pct, axis=0),
+            'lower': np.nanpercentile(pct, 2.5, axis=0),
+            'upper': np.nanpercentile(pct, 97.5, axis=0),
         }
     return stats
 
@@ -384,6 +411,111 @@ def plot_pct_reduction(stats, years, intervention_year=INTV_YEAR):
     return fig, ax
 
 
+def plot_monthly_cases(raw, years_monthly, intervention_year=INTV_YEAR):
+    """
+    Single panel: monthly anemia cases for baseline vs cascade,
+    with RR as separate colored lines.
+
+    Baseline shown as dashed black (mid RR), intervention lines
+    colored by RR. Shaded bands = mean ± std across seeds.
+    """
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    # Baseline: mid RR as representative
+    base_mid = np.array(raw['mid_rr']['baseline_monthly'])
+    base_mean = base_mid.mean(axis=0)
+    base_std  = base_mid.std(axis=0)
+
+    ax.plot(years_monthly, base_mean, color='#6c757d', lw=1.5, ls='--',
+            label='Baseline (mid RR)')
+    ax.fill_between(years_monthly, base_mean - base_std, base_mean + base_std,
+                    color='#6c757d', alpha=0.15)
+
+    # Intervention: one line per RR
+    for rr_name in rr_values:
+        casc_arr  = np.array(raw[rr_name]['cascade_monthly'])
+        casc_mean = casc_arr.mean(axis=0)
+        casc_std  = casc_arr.std(axis=0)
+
+        ax.plot(years_monthly, casc_mean, color=rr_colors[rr_name], lw=1.5,
+                label=f'Cascade ({rr_labels[rr_name]})')
+        ax.fill_between(years_monthly, casc_mean - casc_std, casc_mean + casc_std,
+                        color=rr_colors[rr_name], alpha=0.15)
+
+    ax.axvline(intervention_year, color='k', ls='--', lw=1.5)
+    ylim = ax.get_ylim()
+    ax.text(intervention_year - 0.1, ylim[1] * 0.95, 'Start of\nintervention',
+            ha='right', va='top', fontsize=9, color='#4d4d4d')
+
+    ax.set_xlabel('Year')
+    ax.set_ylabel('Monthly anemia cases')
+    ax.set_title('Monthly anemia cases: baseline vs HMB cascade\n'
+                 'by RR of anemia given HMB')
+    ax.set_xlim([START, STOP])
+    ax.set_ylim(bottom=0)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.legend(frameon=False, fontsize=9)
+    sc.SIticks(ax=ax)
+
+    plt.tight_layout()
+    outpath = PLOTFOLDER + 'anemia_monthly_cases.png'
+    fig.savefig(outpath, dpi=300, bbox_inches='tight')
+    print(f"Saved: {outpath}")
+    plt.show()
+    return fig, ax
+
+
+def plot_monthly_hmb_anemia(raw, years_monthly, intervention_year=INTV_YEAR):
+    """
+    Single panel: monthly anemia cases among women WITH HMB,
+    baseline vs cascade, by RR scenario.
+    """
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    # Baseline: mid RR
+    base_mid = np.array(raw['mid_rr']['baseline_hmb_monthly'])
+    base_mean = base_mid.mean(axis=0)
+    base_std  = base_mid.std(axis=0)
+
+    ax.plot(years_monthly, base_mean, color='#6c757d', lw=1.5, ls='--',
+            label='Baseline (mid RR)')
+    ax.fill_between(years_monthly, base_mean - base_std, base_mean + base_std,
+                    color='#6c757d', alpha=0.15)
+
+    for rr_name in rr_values:
+        casc_arr  = np.array(raw[rr_name]['cascade_hmb_monthly'])
+        casc_mean = casc_arr.mean(axis=0)
+        casc_std  = casc_arr.std(axis=0)
+
+        ax.plot(years_monthly, casc_mean, color=rr_colors[rr_name], lw=1.5,
+                label=f'Cascade ({rr_labels[rr_name]})')
+        ax.fill_between(years_monthly, casc_mean - casc_std, casc_mean + casc_std,
+                        color=rr_colors[rr_name], alpha=0.15)
+
+    ax.axvline(intervention_year, color='k', ls='--', lw=1.5)
+    ylim = ax.get_ylim()
+    ax.text(intervention_year - 0.1, ylim[1] * 0.95, 'Start of\nintervention',
+            ha='right', va='top', fontsize=9, color='#4d4d4d')
+
+    ax.set_xlabel('Year')
+    ax.set_ylabel('Monthly anemia cases among women with HMB')
+    ax.set_title('Anemia among women with HMB: baseline vs cascade\n'
+                 'by RR of anemia given HMB')
+    ax.set_xlim([START, STOP])
+    ax.set_ylim(bottom=0)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.legend(frameon=False, fontsize=9)
+    sc.SIticks(ax=ax)
+
+    plt.tight_layout()
+    outpath = PLOTFOLDER + 'anemia_monthly_hmb_cases.png'
+    fig.savefig(outpath, dpi=300, bbox_inches='tight')
+    print(f"Saved: {outpath}")
+    plt.show()
+    return fig, ax
+
 # ── Summary table ──────────────────────────────────────────────────────────────
 def print_summary(stats, years):
     """Print mean % reduction averaged over post-intervention years."""
@@ -418,13 +550,19 @@ if __name__ == '__main__':
     # Build year axis from first result array
     n_years = len(raw['mid_rr']['baseline'][0])
     years_full = np.arange(START, START + n_years)
+    
+    n_months = len(raw['mid_rr']['baseline_monthly'][0])
+    years_monthly = np.array([START + m / 12 for m in range(n_months)])
 
     # Compute % reduction statistics
     stats = compute_stats(raw)
+   # stats = compute_stats_hmb(raw)
 
     # Plots
     plot_annual_cases(raw, years_full)
     plot_pct_reduction(stats, years_full)
+    plot_monthly_cases(raw, years_monthly)
+    plot_monthly_hmb_anemia(raw, years_monthly)
 
     # Summary table
     print_summary(stats, years_full)

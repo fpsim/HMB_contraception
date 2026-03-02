@@ -61,7 +61,10 @@ class HMBTreatmentBase(ss.Intervention):
         self.define_states(
             # Care seeking
             ss.BoolState('seeking_care'),
-            ss.FloatArr('care_seeking_propensity', default=self.pars.care_seeking_dist),
+            ss.FloatArr('adherence_propensity', default=self.pars.care_seeking_dist),
+            ss.BoolState('ever_sought_care'),  # NEW: track if ever sought care
+            ss.FloatArr('care_propensity', default=float('nan')),  # NEW: one-time Uniform(0,1)
+
 
             # Treatment status
             ss.BoolState('on_treatment'),
@@ -96,19 +99,32 @@ class HMBTreatmentBase(ss.Intervention):
             Array of individualized probabilities for each UID
         """
         pars = sc.objdict(base=base_prob)
-        p = logistic(self, uids, pars, intercept_scale=self.care_seeking_propensity[uids])
+        p = logistic(self, uids, pars, intercept_scale=self.adherence_propensity[uids])
         return p
 
     def determine_care_seeking(self, uids=None):
         """
-        Determine who seeks care using logistic regression.
+        Determine who seeks care using one-time propensity comparison.
+
+        Each person gets a care_propensity drawn once from Uniform(0,1).
+        Each month, their care-seeking probability is computed via the
+        logistic model (incorporating anemia, pain, base rate).
+        
+        A person seeks care if care_propensity < p_care.
+        
+        This is deterministic given the person's current state:
+        - If you're not anemic/in pain and base is 10%, your p_care ≈ 0.10
+          Only people with propensity < 0.10 seek care.
+        - If you become anemic, p_care rises (e.g., to 0.37),
+          and more people cross the threshold.
+        - But a person with propensity 0.95 will NEVER seek care
+          regardless of condition — creating permanent "never-seekers".
 
         Args:
             uids: UIDs to check. If None, uses eligible individuals not on treatment.
         """
         self.seeking_care[:] = False
         if uids is None:
-            # Eligible: menstruating, non-pregnant HMB women not currently on this treatment
             ppl = self.sim.people
             eligible = (ppl.menstruation.hmb &
                        ppl.menstruation.menstruating &
@@ -120,13 +136,23 @@ class HMBTreatmentBase(ss.Intervention):
         if len(uids) == 0:
             return
 
-        # Calculate care-seeking probability
-        p_care = logistic(self, uids, self.pars.care_behavior,
-                         intercept_scale=self.care_seeking_propensity[uids])
-        self._p_care.set(0)
-        self._p_care.set(p_care)
-        seeks_care = self._p_care.filter(uids)
-        self.seeking_care[seeks_care] = True
+        # Initialize care_propensity for anyone who doesn't have one yet
+        unset = np.isnan(self.care_propensity[uids])
+        if np.any(unset):
+            unset_uids = uids[unset]
+            self.care_propensity[unset_uids] = np.random.uniform(
+                0, 1, len(unset_uids)
+            )
+
+        # Calculate care-seeking probability (changes monthly with anemia/pain status)
+        p_care = logistic(self, uids, self.pars.care_behavior)
+
+        # Deterministic comparison: seek care if propensity < probability
+        seeks = self.care_propensity[uids] < p_care
+        seeks_care_uids = uids[seeks]
+        
+        self.seeking_care[seeks_care_uids] = True
+        self.ever_sought_care[seeks_care_uids] = True
 
         return
 
