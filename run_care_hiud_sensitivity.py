@@ -223,17 +223,17 @@ def run_sa(force_rerun=True):
                     depth_dist[n] = 100 * count / total if total > 0 else 0
                 raw[key]['cascade_depth'].append(depth_dist)
 
-                # hIUD uptake
+                # hIUD uptake — denominator includes women whose HMB is suppressed by treatment
                 hmb = s_cascade.people.menstruation.hmb
-                hmb_menstruating = hmb & menstruating
-                n_hmb = np.count_nonzero(hmb_menstruating)
+                hmb_underlying = (hmb | cascade_intv.on_any_treatment) & menstruating
+                n_hmb = np.count_nonzero(hmb_underlying)
 
-                ever_offered_nsaid = cascade_intv.treatments['nsaid'].offered & hmb_menstruating
+                ever_offered_nsaid = cascade_intv.treatments['nsaid'].offered & hmb_underlying
                 n_hmb_seekers = np.count_nonzero(ever_offered_nsaid)
                 tried_hiud_seekers = cascade_intv.treatments['hiud'].tried_treatment & ever_offered_nsaid
                 n_hiud_seekers = np.count_nonzero(tried_hiud_seekers)
 
-                tried_hiud_hmb = cascade_intv.treatments['hiud'].tried_treatment & hmb_menstruating
+                tried_hiud_hmb = cascade_intv.treatments['hiud'].tried_treatment & hmb_underlying
                 n_hiud_hmb = np.count_nonzero(tried_hiud_hmb)
 
                 hiud_uptake = {

@@ -2,7 +2,8 @@
 Calibration sweep: find hIUD acceptance probabilities that produce
 ~5%, 10%, 15% of HMB women ever using hIUD.
 
-Runs for both 20% and 35% base care-seeking to see if 15% is reachable.
+NSAID, TXA, and Pill acceptance all fixed at 50% or 25%.
+Runs for 10%, 20%, and 35% base care-seeking.
 """
 
 import numpy as np
@@ -23,16 +24,21 @@ STOP      = 2030
 INTV_YEAR = 2026
 N_SEEDS   = 5
 
-# Two care-seeking scenarios to calibrate
+# Three care-seeking scenarios
 CARE_SCENARIOS = {
+    '10%': sc.objdict(base=0.10, anemic=1.43, pain=0.61),
     '20%': sc.objdict(base=0.20, anemic=0.86, pain=0.37),
     '35%': sc.objdict(base=0.35, anemic=0.32, pain=0.14),
 }
 
 CARE_COLORS = {
+    '10%': '#d62728',
     '20%': '#ff7f0e',
     '35%': '#2196F3',
 }
+
+# Fixed acceptance for NSAID, TXA, Pill
+FIXED_ACCEPT = 0.25
 
 # Sweep hIUD acceptance from 0.1 to 1.0
 HIUD_ACCEPT_VALUES = np.arange(0.1, 1.05, 0.1)
@@ -42,7 +48,7 @@ os.makedirs(OUTFOLDER, exist_ok=True)
 
 
 def make_sim(care_behavior, hiud_accept, seed=0):
-    """Build sim with specified care-seeking and hIUD acceptance."""
+    """Build sim with all treatment acceptance at 25% except hIUD which is varied."""
     mens = Menstruation()
     edu  = Education()
     cascade = HMBCascade(
@@ -50,11 +56,29 @@ def make_sim(care_behavior, hiud_accept, seed=0):
             year=INTV_YEAR,
             time_to_assess=ss.months(3),
             care_behavior=care_behavior,
+            nsaid=sc.objdict(
+                efficacy=0.5,
+                adherence=0.7,
+                prob_offer=ss.bernoulli(p=0.9),
+                prob_accept=ss.bernoulli(p=FIXED_ACCEPT),  # was 0.7
+            ),
+            txa=sc.objdict(
+                efficacy=0.6,
+                adherence=0.6,
+                prob_offer=ss.bernoulli(p=0.9),
+                prob_accept=ss.bernoulli(p=FIXED_ACCEPT),  # was 0.6
+            ),
+            pill=sc.objdict(
+                efficacy=0.7,
+                adherence=0.75,
+                prob_offer=ss.bernoulli(p=0.9),
+                prob_accept=ss.bernoulli(p=FIXED_ACCEPT),  # was 0.5 (unchanged)
+            ),
             hiud=sc.objdict(
                 efficacy=0.8,
                 adherence=0.85,
                 prob_offer=ss.bernoulli(p=0.9),
-                prob_accept=ss.bernoulli(p=hiud_accept),
+                prob_accept=ss.bernoulli(p=hiud_accept),   # swept
             ),
         )
     )
@@ -77,7 +101,7 @@ def make_sim(care_behavior, hiud_accept, seed=0):
 
 def run_calibration(force_rerun=True):
     """Sweep hIUD acceptance for each care-seeking scenario."""
-    results_file = OUTFOLDER + 'hiud_calibration_multi.obj'
+    results_file = OUTFOLDER + 'hiud_calibration_accept25.obj'
 
     if not force_rerun and os.path.exists(results_file):
         print("Loading saved calibration...")
@@ -87,7 +111,7 @@ def run_calibration(force_rerun=True):
 
     for care_label, care_behavior in CARE_SCENARIOS.items():
         print(f"\n{'='*60}")
-        print(f"Care-seeking: {care_label}")
+        print(f"Care-seeking: {care_label}  |  NSAID/TXA/Pill accept = {FIXED_ACCEPT}")
         print(f"{'='*60}")
 
         results[care_label] = {}
@@ -113,8 +137,10 @@ def run_calibration(force_rerun=True):
                     np.array(cascade_intv.tried_hiud, dtype=int)
                 )
 
-                # % of menstruating HMB women who tried hIUD
-                hmb_menstruating = hmb & menstruating
+                # % of menstruating women with underlying HMB (including those on treatment)
+                hmb_underlying = (hmb | cascade_intv.on_any_treatment) & menstruating
+                hmb_menstruating = hmb_underlying
+                
                 n_hmb = np.count_nonzero(hmb_menstruating)
                 tried_hiud = cascade_intv.treatments['hiud'].tried_treatment & hmb_menstruating
                 n_hiud = np.count_nonzero(tried_hiud)
@@ -153,9 +179,10 @@ def run_calibration(force_rerun=True):
 
 
 def plot_calibration(results):
-    """Plot calibration curves for both care-seeking scenarios."""
+    """Plot calibration curves for all three care-seeking scenarios."""
     fig, axes = plt.subplots(1, 3, figsize=(20, 6))
-    fig.suptitle('hIUD acceptance calibration by care-seeking scenario', fontsize=14)
+    fig.suptitle(f'hIUD acceptance calibration (NSAID/TXA/Pill accept = {int(FIXED_ACCEPT*100)}%)',
+                 fontsize=14)
 
     panels = [
         ('pct_of_hmb', '% of HMB women\nwho ever tried hIUD', axes[0]),
@@ -193,14 +220,14 @@ def plot_calibration(results):
         ax.spines['right'].set_visible(False)
 
     plt.tight_layout()
-    outpath = OUTFOLDER + 'hiud_calibration_curves.png'
+    outpath = OUTFOLDER + 'hiud_calibration_accept25.png'
     fig.savefig(outpath, dpi=300, bbox_inches='tight')
     print(f"Saved: {outpath}")
 
     # Print lookup tables
     for care_label in CARE_SCENARIOS:
         print(f"\n{'─'*70}")
-        print(f"  Care-seeking: {care_label}")
+        print(f"  Care-seeking: {care_label}  |  NSAID/TXA/Pill accept = {int(FIXED_ACCEPT*100)}%")
         print(f"{'─'*70}")
         print(f"  {'Accept':>8}  {'% of HMB':>10}  {'% of seekers':>14}  {'% of treated':>14}")
         print(f"{'─'*70}")
