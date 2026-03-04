@@ -38,7 +38,7 @@ CARE_COLORS = {
 }
 
 # Fixed acceptance for NSAID, TXA, Pill
-FIXED_ACCEPT = 0.25
+FIXED_ACCEPT = 0.50
 
 # Sweep hIUD acceptance from 0.1 to 1.0
 HIUD_ACCEPT_VALUES = np.arange(0.1, 1.05, 0.1)
@@ -48,7 +48,7 @@ os.makedirs(OUTFOLDER, exist_ok=True)
 
 
 def make_sim(care_behavior, hiud_accept, seed=0):
-    """Build sim with all treatment acceptance at 25% except hIUD which is varied."""
+    """Build sim with all treatment acceptance at 50% except hIUD which is varied."""
     mens = Menstruation()
     edu  = Education()
     cascade = HMBCascade(
@@ -101,7 +101,7 @@ def make_sim(care_behavior, hiud_accept, seed=0):
 
 def run_calibration(force_rerun=True):
     """Sweep hIUD acceptance for each care-seeking scenario."""
-    results_file = OUTFOLDER + 'hiud_calibration_accept25.obj'
+    results_file = OUTFOLDER + 'hiud_calibration_accept50.obj'
 
     if not force_rerun and os.path.exists(results_file):
         print("Loading saved calibration...")
@@ -220,7 +220,7 @@ def plot_calibration(results):
         ax.spines['right'].set_visible(False)
 
     plt.tight_layout()
-    outpath = OUTFOLDER + 'hiud_calibration_accept25.png'
+    outpath = OUTFOLDER + 'hiud_calibration_accept50.png'
     fig.savefig(outpath, dpi=300, bbox_inches='tight')
     print(f"Saved: {outpath}")
 

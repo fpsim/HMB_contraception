@@ -1,16 +1,10 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Mar  2 14:29:17 2026
-
-@author: navidehno
-"""
-
 """
 Sensitivity analysis: care-seeking probability × hIUD uptake target
 
-3 × 2 grid:
+3 × 3 grid:
   Care-seeking base: 10%, 20%, 35%
-  hIUD uptake target: ~5% (accept=0.50), ~10% (accept=0.85)
+  hIUD uptake target: ~5% (accept=0.20), ~10% (accept=0.35), ~15% (accept=0.50) NSAID/TXA/Pill acceptance fixed at 50%.
+  hIUD uptake target: ~5% (accept=0.15), ~10% (accept=0.30), ~15% (accept=0.45) NSAID/TXA/Pill acceptance fixed at 25%.
 
 Interventions compared:
   - baseline  : no intervention
@@ -46,6 +40,9 @@ START     = 2020
 STOP      = 2030
 INTV_YEAR = 2026
 
+# Fixed acceptance for NSAID, TXA, Pill
+FIXED_ACCEPT = 0.25
+
 # Care-seeking scenarios
 CARE_SCENARIOS = {
     '10%': sc.objdict(base=0.10, anemic=1.43, pain=0.61),
@@ -53,10 +50,11 @@ CARE_SCENARIOS = {
     '35%': sc.objdict(base=0.35, anemic=0.32, pain=0.14),
 }
 
-# hIUD uptake scenarios (acceptance probabilities from calibration)
+# hIUD uptake scenarios (acceptance probabilities from calibration with 50% fixed accept)
 HIUD_SCENARIOS = {
-    '5%':  0.50,   # produces ~5% of HMB women on hIUD
-    '10%': 0.85,   # produces ~10% of HMB women on hIUD
+    '5%':  0.20,
+    '10%': 0.35,
+    '15%': 0.50,
 }
 
 # Labels and colors
@@ -73,6 +71,7 @@ CARE_COLORS = {
 HIUD_LINESTYLES = {
     '5%':  '-',
     '10%': '--',
+    '15%': ':',
 }
 
 
@@ -88,12 +87,11 @@ def _annualize(monthly_arr, how='sum'):
 
 
 def scenario_key(care_label, hiud_label):
-    """Create a unique key for each scenario combination."""
     return f'{care_label}_hiud{hiud_label}'
 
 
 # ── Simulation creation ───────────────────────────────────────────────────────
-def make_sim(care_behavior=None, hiud_accept=0.5, with_intervention=True, seed=0):
+def make_sim(care_behavior=None, hiud_accept=0.20, with_intervention=True, seed=0):
     mens = Menstruation()
     edu  = Education()
 
@@ -121,6 +119,24 @@ def make_sim(care_behavior=None, hiud_accept=0.5, with_intervention=True, seed=0
                 year=INTV_YEAR,
                 time_to_assess=ss.months(3),
                 care_behavior=care_behavior,
+                nsaid=sc.objdict(
+                    efficacy=0.5,
+                    adherence=0.7,
+                    prob_offer=ss.bernoulli(p=0.9),
+                    prob_accept=ss.bernoulli(p=FIXED_ACCEPT),
+                ),
+                txa=sc.objdict(
+                    efficacy=0.6,
+                    adherence=0.6,
+                    prob_offer=ss.bernoulli(p=0.9),
+                    prob_accept=ss.bernoulli(p=FIXED_ACCEPT),
+                ),
+                pill=sc.objdict(
+                    efficacy=0.7,
+                    adherence=0.75,
+                    prob_offer=ss.bernoulli(p=0.9),
+                    prob_accept=ss.bernoulli(p=FIXED_ACCEPT),
+                ),
                 hiud=sc.objdict(
                     efficacy=0.8,
                     adherence=0.85,
@@ -149,8 +165,8 @@ def run_sa(force_rerun=True):
         return sc.loadobj(results_file)
 
     raw = {}
-    for care_label, care_behavior in CARE_SCENARIOS.items():
-        for hiud_label, hiud_accept in HIUD_SCENARIOS.items():
+    for care_label in CARE_SCENARIOS:
+        for hiud_label in HIUD_SCENARIOS:
             key = scenario_key(care_label, hiud_label)
             raw[key] = {
                 'baseline': [], 'cascade': [], 'averted': [],
@@ -164,6 +180,12 @@ def run_sa(force_rerun=True):
                 'hiud_uptake': [],
                 'care_label': care_label,
                 'hiud_label': hiud_label,
+                'baseline_hmb_prev': [],
+                'cascade_hmb_prev': [],
+                'baseline_disrupted': [],
+                'cascade_disrupted': [],
+                'baseline_n_disruptions': [],
+                'cascade_n_disruptions': [],
             }
 
     for care_label, care_behavior in CARE_SCENARIOS.items():
@@ -206,6 +228,22 @@ def run_sa(force_rerun=True):
                     np.asarray(s_cascade.results.track_care_seeking['care_seeking_anemic']))
                 raw[key]['care_seeking_not_anemic'].append(
                     np.asarray(s_cascade.results.track_care_seeking['care_seeking_not_anemic']))
+                
+                # HMB prevalence
+                raw[key]['baseline_hmb_prev'].append(
+                    np.asarray(s_base.results.menstruation['hmb_prev']))
+                raw[key]['cascade_hmb_prev'].append(
+                    np.asarray(s_cascade.results.menstruation['hmb_prev']))
+
+                # School disruptions
+                raw[key]['baseline_disrupted'].append(
+                    np.asarray(s_base.results.edu['prop_disrupted']))
+                raw[key]['cascade_disrupted'].append(
+                    np.asarray(s_cascade.results.edu['prop_disrupted']))
+                raw[key]['baseline_n_disruptions'].append(
+                    np.asarray(s_base.results.edu['n_disruptions']))
+                raw[key]['cascade_n_disruptions'].append(
+                    np.asarray(s_cascade.results.edu['n_disruptions']))
 
                 # Cascade depth
                 cascade_intv = s_cascade.interventions.hmb_cascade
@@ -223,7 +261,7 @@ def run_sa(force_rerun=True):
                     depth_dist[n] = 100 * count / total if total > 0 else 0
                 raw[key]['cascade_depth'].append(depth_dist)
 
-                # hIUD uptake — denominator includes women whose HMB is suppressed by treatment
+                # hIUD uptake — corrected denominator includes women on treatment
                 hmb = s_cascade.people.menstruation.hmb
                 hmb_underlying = (hmb | cascade_intv.on_any_treatment) & menstruating
                 n_hmb = np.count_nonzero(hmb_underlying)
@@ -283,13 +321,13 @@ def compute_stats(raw):
 # ── Plots ──────────────────────────────────────────────────────────────────────
 def plot_monthly_cases(raw, years_monthly):
     """Monthly HMB-related anemia: one panel per hIUD scenario."""
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    n_hiud = len(HIUD_SCENARIOS)
+    fig, axes = plt.subplots(1, n_hiud, figsize=(7 * n_hiud, 6))
     fig.suptitle('Monthly HMB-related anemia by care-seeking and hIUD uptake', fontsize=14)
 
     for idx, hiud_label in enumerate(HIUD_SCENARIOS):
         ax = axes[idx]
 
-        # Baseline (same across scenarios)
         all_baselines = []
         for care_label in CARE_SCENARIOS:
             key = scenario_key(care_label, hiud_label)
@@ -310,7 +348,7 @@ def plot_monthly_cases(raw, years_monthly):
             casc_std  = casc_arr.std(axis=0)
 
             ax.plot(years_monthly, casc_mean, color=CARE_COLORS[care_label], lw=1.5,
-                    label=f'{CARE_LABELS[care_label]}')
+                    label=CARE_LABELS[care_label])
             ax.fill_between(years_monthly, casc_mean - casc_std, casc_mean + casc_std,
                             color=CARE_COLORS[care_label], alpha=0.15)
 
@@ -334,7 +372,8 @@ def plot_monthly_cases(raw, years_monthly):
 
 def plot_impact_comparison(raw, years_monthly):
     """Total anemia and HMB-related anemia: one panel per hIUD scenario."""
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    n_hiud = len(HIUD_SCENARIOS)
+    fig, axes = plt.subplots(2, n_hiud, figsize=(7 * n_hiud, 12))
     fig.suptitle('Intervention impact by care-seeking and hIUD uptake', fontsize=14)
 
     for col, hiud_label in enumerate(HIUD_SCENARIOS):
@@ -416,9 +455,9 @@ def plot_impact_comparison(raw, years_monthly):
 
 
 def plot_pct_reduction_timeseries(stats, years):
-    """% reduction over time: all 6 scenarios on one panel."""
+    """% reduction over time: all 9 scenarios on one panel."""
     post_mask = years >= INTV_YEAR
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(12, 7))
 
     for care_label in CARE_SCENARIOS:
         for hiud_label in HIUD_SCENARIOS:
@@ -433,7 +472,7 @@ def plot_pct_reduction_timeseries(stats, years):
                     ls=HIUD_LINESTYLES[hiud_label], lw=2.5,
                     label=f'{CARE_LABELS[care_label]}, hIUD {hiud_label}')
             ax.fill_between(years, lower, upper,
-                            color=CARE_COLORS[care_label], alpha=0.08)
+                            color=CARE_COLORS[care_label], alpha=0.06)
 
     ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
     ylim = ax.get_ylim()
@@ -447,7 +486,7 @@ def plot_pct_reduction_timeseries(stats, years):
     ax.set_ylim(bottom=0)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.legend(frameon=False, fontsize=9, ncol=2)
+    ax.legend(frameon=False, fontsize=8, ncol=3)
 
     plt.tight_layout()
     outpath = PLOTFOLDER + 'sa_pct_reduction_timeseries.png'
@@ -457,10 +496,10 @@ def plot_pct_reduction_timeseries(stats, years):
 
 
 def plot_pct_reduction_barchart(raw, stats, years):
-    """Grouped bar chart: % reduction and absolute averted, grouped by hIUD target."""
+    """Grouped bar chart: % reduction and absolute averted."""
     post_mask = years >= INTV_YEAR
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+    fig, axes = plt.subplots(1, 2, figsize=(18, 7))
     fig.suptitle('Anemia reduction vs. no-intervention baseline\n'
                  '(post-intervention average)', fontsize=14)
 
@@ -468,12 +507,12 @@ def plot_pct_reduction_barchart(raw, stats, years):
     hiud_list = list(HIUD_SCENARIOS.keys())
     n_care = len(care_list)
     n_hiud = len(hiud_list)
-    n_groups = n_care
-    n_bars = n_hiud
 
-    x = np.arange(n_groups)
-    total_width = 0.6
-    bar_width = total_width / n_bars
+    x = np.arange(n_care)
+    total_width = 0.75
+    bar_width = total_width / n_hiud
+
+    hiud_alphas = {'5%': 0.9, '10%': 0.65, '15%': 0.4}
 
     # Panel 1: % reduction
     ax = axes[0]
@@ -486,10 +525,10 @@ def plot_pct_reduction_barchart(raw, stats, years):
             means.append(np.nanmean(s['mean'][post_mask]))
             stds.append(np.nanmean(s['std'][post_mask]))
 
-        offset = (i - (n_bars - 1) / 2) * bar_width
+        offset = (i - (n_hiud - 1) / 2) * bar_width
         bars = ax.bar(x + offset, means, bar_width, yerr=stds, capsize=4,
                       label=f'hIUD {hiud_label}',
-                      alpha=0.7 if i == 0 else 0.5,
+                      alpha=hiud_alphas[hiud_label],
                       edgecolor='black', linewidth=0.5,
                       color=[CARE_COLORS[c] for c in care_list])
 
@@ -497,7 +536,7 @@ def plot_pct_reduction_barchart(raw, stats, years):
             ax.text(bar.get_x() + bar.get_width() / 2,
                     bar.get_height() + err + 0.3,
                     f'{val:.1f}%', ha='center', va='bottom',
-                    fontsize=9, fontweight='bold')
+                    fontsize=8, fontweight='bold')
 
     ax.set_xlabel('Care-seeking scenario')
     ax.set_ylabel('% reduction in HMB-related anemia')
@@ -521,11 +560,11 @@ def plot_pct_reduction_barchart(raw, stats, years):
             means.append(post_averted.mean())
             stds.append(post_averted.std(axis=0).mean())
 
-        offset = (i - (n_bars - 1) / 2) * bar_width
+        offset = (i - (n_hiud - 1) / 2) * bar_width
         bars = ax.bar(x + offset, [v / 1e6 for v in means], bar_width,
                       yerr=[v / 1e6 for v in stds], capsize=4,
                       label=f'hIUD {hiud_label}',
-                      alpha=0.7 if i == 0 else 0.5,
+                      alpha=hiud_alphas[hiud_label],
                       edgecolor='black', linewidth=0.5,
                       color=[CARE_COLORS[c] for c in care_list])
 
@@ -533,7 +572,7 @@ def plot_pct_reduction_barchart(raw, stats, years):
             ax.text(bar.get_x() + bar.get_width() / 2,
                     bar.get_height() + err / 1e6 + 0.01,
                     f'{val/1e6:.2f}m', ha='center', va='bottom',
-                    fontsize=9, fontweight='bold')
+                    fontsize=8, fontweight='bold')
 
     ax.set_xlabel('Care-seeking scenario')
     ax.set_ylabel('Annual averted anemia cases (millions)')
@@ -554,8 +593,8 @@ def plot_pct_reduction_barchart(raw, stats, years):
 
 def plot_hiud_uptake(raw):
     """hIUD uptake bar chart: grouped by care-seeking, colored by hIUD scenario."""
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    fig.suptitle('hIUD uptake among women with HMB', fontsize=14)
+    fig, axes = plt.subplots(1, 2, figsize=(18, 6))
+    fig.suptitle('hIUD uptake among women with HMB (underlying)', fontsize=14)
 
     care_list = list(CARE_SCENARIOS.keys())
     hiud_list = list(HIUD_SCENARIOS.keys())
@@ -563,10 +602,10 @@ def plot_hiud_uptake(raw):
     n_hiud = len(hiud_list)
 
     x = np.arange(n_care)
-    total_width = 0.6
+    total_width = 0.75
     bar_width = total_width / n_hiud
 
-    hiud_bar_colors = {'5%': '#4CAF50', '10%': '#F44336'}
+    hiud_bar_colors = {'5%': '#4CAF50', '10%': '#FF9800', '15%': '#F44336'}
 
     # Panel 1: % of HMB seekers
     ax = axes[0]
@@ -589,7 +628,7 @@ def plot_hiud_uptake(raw):
             ax.text(bar.get_x() + bar.get_width() / 2,
                     bar.get_height() + err + 0.3,
                     f'{val:.1f}%', ha='center', va='bottom',
-                    fontsize=9, fontweight='bold')
+                    fontsize=8, fontweight='bold')
 
     ax.set_xlabel('Care-seeking scenario')
     ax.set_ylabel('% initiating hIUD')
@@ -601,7 +640,7 @@ def plot_hiud_uptake(raw):
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
 
-    # Panel 2: % of all HMB women
+    # Panel 2: % of all HMB women (underlying)
     ax = axes[1]
     for i, hiud_label in enumerate(hiud_list):
         means = []
@@ -622,11 +661,11 @@ def plot_hiud_uptake(raw):
             ax.text(bar.get_x() + bar.get_width() / 2,
                     bar.get_height() + err + 0.3,
                     f'{val:.1f}%', ha='center', va='bottom',
-                    fontsize=9, fontweight='bold')
+                    fontsize=8, fontweight='bold')
 
     ax.set_xlabel('Care-seeking scenario')
     ax.set_ylabel('% using hIUD')
-    ax.set_title('% of women with HMB\nwho ever used hIUD')
+    ax.set_title('% of women with underlying HMB\nwho ever used hIUD')
     ax.set_xticks(x)
     ax.set_xticklabels([CARE_LABELS[c] for c in care_list])
     ax.legend(frameon=False, fontsize=10)
@@ -643,7 +682,8 @@ def plot_hiud_uptake(raw):
 
 def plot_cascade_comparison(raw):
     """Cascade depth: one panel per hIUD scenario."""
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    n_hiud = len(HIUD_SCENARIOS)
+    fig, axes = plt.subplots(1, n_hiud, figsize=(7 * n_hiud, 6))
     fig.suptitle('Cascade progression by care-seeking and hIUD uptake', fontsize=14)
 
     care_list = list(CARE_SCENARIOS.keys())
@@ -688,23 +728,287 @@ def plot_cascade_comparison(raw):
     print(f"Saved: {outpath}")
     return fig
 
+def plot_hmb_prevalence(raw, years_monthly):
+    """HMB prevalence over time: one panel per hIUD scenario."""
+    n_hiud = len(HIUD_SCENARIOS)
+    fig, axes = plt.subplots(1, n_hiud, figsize=(7 * n_hiud, 6))
+    fig.suptitle('HMB prevalence among menstruating women', fontsize=14)
+
+    for idx, hiud_label in enumerate(HIUD_SCENARIOS):
+        ax = axes[idx]
+
+        # Baseline
+        all_base = []
+        for care_label in CARE_SCENARIOS:
+            key = scenario_key(care_label, hiud_label)
+            all_base.extend(raw[key]['baseline_hmb_prev'])
+        base_arr = np.array(all_base) * 100
+        base_mean = base_arr.mean(axis=0)
+        base_std  = base_arr.std(axis=0)
+
+        ax.plot(years_monthly, base_mean, color='#6c757d', lw=1.5, ls='--',
+                label='No intervention')
+        ax.fill_between(years_monthly, base_mean - base_std, base_mean + base_std,
+                        color='#6c757d', alpha=0.15)
+
+        for care_label in CARE_SCENARIOS:
+            key = scenario_key(care_label, hiud_label)
+            casc_arr = np.array(raw[key]['cascade_hmb_prev']) * 100
+            casc_mean = casc_arr.mean(axis=0)
+            casc_std  = casc_arr.std(axis=0)
+
+            ax.plot(years_monthly, casc_mean, color=CARE_COLORS[care_label], lw=1.5,
+                    label=CARE_LABELS[care_label])
+            ax.fill_between(years_monthly, casc_mean - casc_std, casc_mean + casc_std,
+                            color=CARE_COLORS[care_label], alpha=0.15)
+
+        ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
+        ax.set_xlabel('Year')
+        ax.set_ylabel('HMB prevalence (%)')
+        ax.set_title(f'hIUD uptake target: {hiud_label}')
+        ax.set_xlim([START, STOP])
+        ax.set_ylim(bottom=0)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.legend(frameon=False, fontsize=9)
+
+    plt.tight_layout()
+    outpath = PLOTFOLDER + 'sa_hmb_prevalence.png'
+    fig.savefig(outpath, dpi=300, bbox_inches='tight')
+    print(f"Saved: {outpath}")
+    return fig
+
+
+def plot_disruption_rate(raw, years_monthly):
+    """Monthly school disruption rate: one panel per hIUD scenario."""
+    n_hiud = len(HIUD_SCENARIOS)
+    fig, axes = plt.subplots(1, n_hiud, figsize=(7 * n_hiud, 6))
+    fig.suptitle('Monthly school disruption rate among in-school menstruating AGYW', fontsize=14)
+
+    for idx, hiud_label in enumerate(HIUD_SCENARIOS):
+        ax = axes[idx]
+
+        # Baseline
+        all_base = []
+        for care_label in CARE_SCENARIOS:
+            key = scenario_key(care_label, hiud_label)
+            all_base.extend(raw[key]['baseline_disrupted'])
+        base_arr = np.array(all_base) * 100
+        base_mean = base_arr.mean(axis=0)
+        base_std  = base_arr.std(axis=0)
+
+        ax.plot(years_monthly, base_mean, color='#6c757d', lw=1.5, ls='--',
+                label='No intervention')
+        ax.fill_between(years_monthly, base_mean - base_std, base_mean + base_std,
+                        color='#6c757d', alpha=0.15)
+
+        for care_label in CARE_SCENARIOS:
+            key = scenario_key(care_label, hiud_label)
+            casc_arr = np.array(raw[key]['cascade_disrupted']) * 100
+            casc_mean = casc_arr.mean(axis=0)
+            casc_std  = casc_arr.std(axis=0)
+
+            ax.plot(years_monthly, casc_mean, color=CARE_COLORS[care_label], lw=1.5,
+                    label=CARE_LABELS[care_label])
+            ax.fill_between(years_monthly, casc_mean - casc_std, casc_mean + casc_std,
+                            color=CARE_COLORS[care_label], alpha=0.15)
+
+        ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
+        ax.set_xlabel('Year')
+        ax.set_ylabel('Disruption rate (%)')
+        ax.set_title(f'hIUD uptake target: {hiud_label}')
+        ax.set_xlim([START, STOP])
+        ax.set_ylim(bottom=0)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.legend(frameon=False, fontsize=9)
+
+    plt.tight_layout()
+    outpath = PLOTFOLDER + 'sa_disruption_rate.png'
+    fig.savefig(outpath, dpi=300, bbox_inches='tight')
+    print(f"Saved: {outpath}")
+    return fig
+
+
+def compute_disruption_stats(raw):
+    """
+    Compute % reduction in annual disruptions, per seed then aggregated.
+
+    % reduction = (baseline_annual - cascade_annual) / baseline_annual * 100
+    """
+    stats = {}
+    for care_label in CARE_SCENARIOS:
+        for hiud_label in HIUD_SCENARIOS:
+            key = scenario_key(care_label, hiud_label)
+
+            base_annual = np.array([_annualize(m) for m in raw[key]['baseline_n_disruptions']])
+            casc_annual = np.array([_annualize(m) for m in raw[key]['cascade_n_disruptions']])
+            averted = base_annual - casc_annual
+
+            pct = np.where(base_annual > 0, averted / base_annual * 100, np.nan)
+
+            stats[key] = {
+                'mean': np.nanmean(pct, axis=0),
+                'std':  np.nanstd(pct, axis=0),
+            }
+    return stats
+
+
+def plot_disruption_reduction_timeseries(disruption_stats, years):
+    """% reduction in annual disruptions over time: all 9 scenarios."""
+    post_mask = years >= INTV_YEAR
+    fig, ax = plt.subplots(figsize=(12, 7))
+
+    for care_label in CARE_SCENARIOS:
+        for hiud_label in HIUD_SCENARIOS:
+            key = scenario_key(care_label, hiud_label)
+            s = disruption_stats[key]
+
+            mean  = np.where(post_mask, s['mean'], np.nan)
+            upper = np.where(post_mask, s['mean'] + s['std'], np.nan)
+            lower = np.where(post_mask, s['mean'] - s['std'], np.nan)
+
+            ax.plot(years, mean, color=CARE_COLORS[care_label],
+                    ls=HIUD_LINESTYLES[hiud_label], lw=2.5,
+                    label=f'{CARE_LABELS[care_label]}, hIUD {hiud_label}')
+            ax.fill_between(years, lower, upper,
+                            color=CARE_COLORS[care_label], alpha=0.06)
+
+    ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
+    ylim = ax.get_ylim()
+    ax.text(INTV_YEAR - 0.2, ylim[1] * 0.95, 'Start of\nintervention',
+            ha='right', va='top', fontsize=9, color='#4d4d4d')
+
+    ax.set_xlabel('Year')
+    ax.set_ylabel('% reduction in annual school disruptions')
+    ax.set_title('% reduction in school disruptions\nby care-seeking and hIUD uptake target')
+    ax.set_xlim([START, STOP])
+    ax.set_ylim(bottom=0)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.legend(frameon=False, fontsize=8, ncol=3)
+
+    plt.tight_layout()
+    outpath = PLOTFOLDER + 'sa_disruption_reduction_timeseries.png'
+    fig.savefig(outpath, dpi=300, bbox_inches='tight')
+    print(f"Saved: {outpath}")
+    return fig
+
+
+def plot_disruption_reduction_barchart(raw, disruption_stats, years):
+    """Bar chart: % reduction in annual disruptions, post-intervention average."""
+    post_mask = years >= INTV_YEAR
+
+    fig, axes = plt.subplots(1, 2, figsize=(18, 7))
+    fig.suptitle('School disruption reduction vs. no-intervention baseline\n'
+                 '(post-intervention average)', fontsize=14)
+
+    care_list = list(CARE_SCENARIOS.keys())
+    hiud_list = list(HIUD_SCENARIOS.keys())
+    n_care = len(care_list)
+    n_hiud = len(hiud_list)
+
+    x = np.arange(n_care)
+    total_width = 0.75
+    bar_width = total_width / n_hiud
+
+    hiud_alphas = {'5%': 0.9, '10%': 0.65, '15%': 0.4}
+
+    # Panel 1: % reduction
+    ax = axes[0]
+    for i, hiud_label in enumerate(hiud_list):
+        means = []
+        stds = []
+        for care_label in care_list:
+            key = scenario_key(care_label, hiud_label)
+            s = disruption_stats[key]
+            means.append(np.nanmean(s['mean'][post_mask]))
+            stds.append(np.nanmean(s['std'][post_mask]))
+
+        offset = (i - (n_hiud - 1) / 2) * bar_width
+        bars = ax.bar(x + offset, means, bar_width, yerr=stds, capsize=4,
+                      label=f'hIUD {hiud_label}',
+                      alpha=hiud_alphas[hiud_label],
+                      edgecolor='black', linewidth=0.5,
+                      color=[CARE_COLORS[c] for c in care_list])
+
+        for bar, val, err in zip(bars, means, stds):
+            ax.text(bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + err + 0.3,
+                    f'{val:.1f}%', ha='center', va='bottom',
+                    fontsize=8, fontweight='bold')
+
+    ax.set_xlabel('Care-seeking scenario')
+    ax.set_ylabel('% reduction in annual school disruptions')
+    ax.set_title('Percentage reduction')
+    ax.set_xticks(x)
+    ax.set_xticklabels([CARE_LABELS[c] for c in care_list])
+    ax.legend(frameon=False, fontsize=10)
+    ax.grid(axis='y', alpha=0.3)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    # Panel 2: Absolute averted disruptions
+    ax = axes[1]
+    for i, hiud_label in enumerate(hiud_list):
+        means = []
+        stds = []
+        for care_label in care_list:
+            key = scenario_key(care_label, hiud_label)
+            base_annual = np.array([_annualize(m) for m in raw[key]['baseline_n_disruptions']])
+            casc_annual = np.array([_annualize(m) for m in raw[key]['cascade_n_disruptions']])
+            averted = base_annual - casc_annual
+            post_averted = averted[:, post_mask]
+            means.append(post_averted.mean())
+            stds.append(post_averted.std(axis=0).mean())
+
+        offset = (i - (n_hiud - 1) / 2) * bar_width
+        bars = ax.bar(x + offset, [v / 1e6 for v in means], bar_width,
+                      yerr=[v / 1e6 for v in stds], capsize=4,
+                      label=f'hIUD {hiud_label}',
+                      alpha=hiud_alphas[hiud_label],
+                      edgecolor='black', linewidth=0.5,
+                      color=[CARE_COLORS[c] for c in care_list])
+
+        for bar, val, err in zip(bars, means, stds):
+            ax.text(bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + err / 1e6 + 0.01,
+                    f'{val/1e6:.2f}m', ha='center', va='bottom',
+                    fontsize=8, fontweight='bold')
+
+    ax.set_xlabel('Care-seeking scenario')
+    ax.set_ylabel('Annual averted disruptions (millions)')
+    ax.set_title('Absolute reduction')
+    ax.set_xticks(x)
+    ax.set_xticklabels([CARE_LABELS[c] for c in care_list])
+    ax.legend(frameon=False, fontsize=10)
+    ax.grid(axis='y', alpha=0.3)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    plt.tight_layout()
+    outpath = PLOTFOLDER + 'sa_disruption_reduction_barchart.png'
+    fig.savefig(outpath, dpi=300, bbox_inches='tight')
+    print(f"Saved: {outpath}")
+    return fig
 
 # ── Summary tables ─────────────────────────────────────────────────────────────
 def print_summary(raw, stats, years):
     post_mask = years >= INTV_YEAR
 
-    print(f"\n{'═'*80}")
-    print(f"  SENSITIVITY ANALYSIS: Care-seeking × hIUD uptake")
+    print(f"\n{'═'*90}")
+    print(f"  SENSITIVITY ANALYSIS: Care-seeking × hIUD uptake (3×3)")
+    print(f"  NSAID/TXA/Pill acceptance = {int(FIXED_ACCEPT*100)}%")
     print(f"  Post-intervention average ({INTV_YEAR}–{STOP})")
-    print(f"{'═'*80}")
+    print(f"{'═'*90}")
 
     # % reduction table
     print(f"\n  % Reduction in HMB-related anemia:")
     print(f"  {'':>12}", end="")
     for hiud_label in HIUD_SCENARIOS:
-        print(f"  {'hIUD ' + hiud_label:>16}", end="")
+        print(f"  {'hIUD ' + hiud_label:>18}", end="")
     print()
-    print(f"  {'─'*50}")
+    print(f"  {'─'*66}")
 
     for care_label in CARE_SCENARIOS:
         print(f"  {CARE_LABELS[care_label]:>12}", end="")
@@ -713,32 +1017,48 @@ def print_summary(raw, stats, years):
             s = stats[key]
             m = np.nanmean(s['mean'][post_mask])
             std = np.nanmean(s['std'][post_mask])
-            print(f"  {m:>8.1f}% ± {std:.1f}%", end="")
+            print(f"  {m:>9.1f}% ± {std:.1f}%", end="")
         print()
 
     # hIUD uptake table
-    print(f"\n  % of HMB women who ever used hIUD:")
+    print(f"\n  % of women with underlying HMB who ever used hIUD:")
     print(f"  {'':>12}", end="")
     for hiud_label in HIUD_SCENARIOS:
-        print(f"  {'hIUD ' + hiud_label:>16}", end="")
+        print(f"  {'hIUD ' + hiud_label:>18}", end="")
     print()
-    print(f"  {'─'*50}")
+    print(f"  {'─'*66}")
 
     for care_label in CARE_SCENARIOS:
         print(f"  {CARE_LABELS[care_label]:>12}", end="")
         for hiud_label in HIUD_SCENARIOS:
             key = scenario_key(care_label, hiud_label)
             vals = [u['pct_of_hmb'] for u in raw[key]['hiud_uptake']]
-            print(f"  {np.mean(vals):>8.1f}% ± {np.std(vals):.1f}%", end="")
+            print(f"  {np.mean(vals):>9.1f}% ± {np.std(vals):.1f}%", end="")
+        print()
+
+    # hIUD uptake among seekers
+    print(f"\n  % of HMB care-seekers who initiated hIUD:")
+    print(f"  {'':>12}", end="")
+    for hiud_label in HIUD_SCENARIOS:
+        print(f"  {'hIUD ' + hiud_label:>18}", end="")
+    print()
+    print(f"  {'─'*66}")
+
+    for care_label in CARE_SCENARIOS:
+        print(f"  {CARE_LABELS[care_label]:>12}", end="")
+        for hiud_label in HIUD_SCENARIOS:
+            key = scenario_key(care_label, hiud_label)
+            vals = [u['pct_of_hmb_seekers'] for u in raw[key]['hiud_uptake']]
+            print(f"  {np.mean(vals):>9.1f}% ± {np.std(vals):.1f}%", end="")
         print()
 
     # Absolute averted table
     print(f"\n  Annual averted HMB-related anemia cases (millions):")
     print(f"  {'':>12}", end="")
     for hiud_label in HIUD_SCENARIOS:
-        print(f"  {'hIUD ' + hiud_label:>16}", end="")
+        print(f"  {'hIUD ' + hiud_label:>18}", end="")
     print()
-    print(f"  {'─'*50}")
+    print(f"  {'─'*66}")
 
     for care_label in CARE_SCENARIOS:
         print(f"  {CARE_LABELS[care_label]:>12}", end="")
@@ -748,12 +1068,34 @@ def print_summary(raw, stats, years):
             post_averted = averted_arr[:, post_mask]
             m = post_averted.mean() / 1e6
             std = post_averted.std(axis=0).mean() / 1e6
-            print(f"  {m:>8.2f}m ± {std:.2f}m", end="")
+            print(f"  {m:>9.2f}m ± {std:.2f}m", end="")
         print()
 
-    print(f"{'═'*80}\n")
+    print(f"{'═'*90}\n")
 
 
+def print_disruption_summary(disruption_stats, years):
+    """Print disruption reduction summary table."""
+    post_mask = years >= INTV_YEAR
+
+    print(f"\n  % Reduction in annual school disruptions:")
+    print(f"  {'':>12}", end="")
+    for hiud_label in HIUD_SCENARIOS:
+        print(f"  {'hIUD ' + hiud_label:>18}", end="")
+    print()
+    print(f"  {'─'*66}")
+
+    for care_label in CARE_SCENARIOS:
+        print(f"  {CARE_LABELS[care_label]:>12}", end="")
+        for hiud_label in HIUD_SCENARIOS:
+            key = scenario_key(care_label, hiud_label)
+            s = disruption_stats[key]
+            m = np.nanmean(s['mean'][post_mask])
+            std = np.nanmean(s['std'][post_mask])
+            print(f"  {m:>9.1f}% ± {std:.1f}%", end="")
+        print()
+        
+        
 # ── Main ───────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
 
@@ -770,6 +1112,9 @@ if __name__ == '__main__':
     years_monthly = np.array([START + m / 12 for m in range(n_months)])
 
     stats = compute_stats(raw)
+    
+    # Compute disruption stats
+    disruption_stats = compute_disruption_stats(raw)
 
     # Plots
     plot_monthly_cases(raw, years_monthly)
@@ -778,6 +1123,11 @@ if __name__ == '__main__':
     plot_pct_reduction_barchart(raw, stats, years)
     plot_hiud_uptake(raw)
     plot_cascade_comparison(raw)
+    plot_hmb_prevalence(raw, years_monthly)
+    plot_disruption_rate(raw, years_monthly)
+    plot_disruption_reduction_timeseries(disruption_stats, years)
+    plot_disruption_reduction_barchart(raw, disruption_stats, years)
 
     # Summary
     print_summary(raw, stats, years)
+    print_disruption_summary(disruption_stats, years)
