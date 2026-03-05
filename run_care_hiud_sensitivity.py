@@ -41,7 +41,7 @@ STOP      = 2030
 INTV_YEAR = 2026
 
 # Fixed acceptance for NSAID, TXA, Pill
-FIXED_ACCEPT = 0.25
+FIXED_ACCEPT = 0.50
 
 # Care-seeking scenarios
 CARE_SCENARIOS = {
