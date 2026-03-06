@@ -207,7 +207,11 @@ The package includes several analysis scripts:
 - `run_baseline.py` - Baseline simulation and characteristics plotting
 - `run_cascade.py` - Full cascade intervention analysis with visualization
 - `run_component_analysis.py` - Component-level treatment impact analysis
-- `run_care_sensitivity.py` - Care-seeking parameter sensitivity analysis
+- `run_care_sensitivity.py` - Heterogeneous vs homogeneous care-seeking sensitivity analysis
+- `run_care_rate_sensitivity.py` - Base care-seeking rate sensitivity (10%/20%/35%) with calibrated coefficients
+- `run_care_hiud_sensitivity.py` - Joint care-seeking x hIUD uptake target sensitivity (3x3 grid)
+- `run_anemia_risk_sensitivity.py` - Anemia reduction under varying RR of anemia given HMB
+- `hiud_acceptance.py` - Calibration sweep for hIUD acceptance probabilities
 - `analyze_cascade_impact.py` - Treatment success probability calculations
 
 ## Project structure
@@ -222,7 +226,11 @@ The package includes several analysis scripts:
 - `run_baseline.py` - Baseline simulation runner
 - `run_cascade.py` - Full cascade analysis runner
 - `run_component_analysis.py` - Component analysis runner
-- `run_care_sensitivity.py` - Care-seeking sensitivity analysis
+- `run_care_sensitivity.py` - Heterogeneous vs homogeneous care-seeking sensitivity
+- `run_care_rate_sensitivity.py` - Base care-seeking rate sensitivity analysis
+- `run_care_hiud_sensitivity.py` - Joint care-seeking x hIUD uptake sensitivity
+- `run_anemia_risk_sensitivity.py` - Anemia risk sensitivity analysis
+- `hiud_acceptance.py` - hIUD acceptance calibration sweep
 - `tests/` - Comprehensive test suite
 - `data/` - Input data files
 

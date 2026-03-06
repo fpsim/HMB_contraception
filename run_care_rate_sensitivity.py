@@ -1,22 +1,13 @@
-
-# -*- coding: utf-8 -*-
 """
-Created on Fri Feb 27 08:39:13 2026
+Sensitivity analysis: base care-seeking rate
 
-@author: navidehno
-"""
-
-"""
-Sensitivity analysis: % reduction in anemia cases under varying
-base care-seeking probability (10%, 20%, 35%).
-
-Anemia and pain coefficients are calibrated so the combined (anemia + pain)
-case reaches 46% for all scenarios, with a 70/30 budget split favoring anemia.
+Varies the base care-seeking probability (10%, 20%, 35%) with anemia and pain
+coefficients calibrated so the combined (anemia + pain) scenario reaches 46%
+for all base rates, using a 70/30 budget split favoring anemia.
 
 Interventions compared:
   - baseline  : no intervention
-  - cascade   : full HMBCascade (NSAID → TXA → Pill → hIUD)
-
+  - cascade   : full HMBCascade (NSAID -> TXA -> Pill -> hIUD)
 """
 
 import numpy as np
