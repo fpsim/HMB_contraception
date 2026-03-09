@@ -44,10 +44,17 @@ INTV_YEAR = 2026
 FIXED_ACCEPT = 0.50
 
 # Care-seeking scenarios
+# CARE_SCENARIOS = {
+#     '10%': sc.objdict(base=0.10, anemic=1.43, pain=0.61),
+#     '20%': sc.objdict(base=0.20, anemic=0.86, pain=0.37),
+#     '35%': sc.objdict(base=0.35, anemic=0.32, pain=0.14),
+# }
+
+# anemic and pain coefficients held fixed; only base rate varies
 CARE_SCENARIOS = {
-    '10%': sc.objdict(base=0.10, anemic=1.43, pain=0.61),
+    '10%': sc.objdict(base=0.10, anemic=0.86, pain=0.37),
     '20%': sc.objdict(base=0.20, anemic=0.86, pain=0.37),
-    '35%': sc.objdict(base=0.35, anemic=0.32, pain=0.14),
+    '35%': sc.objdict(base=0.35, anemic=0.86, pain=0.37),
 }
 
 # hIUD uptake scenarios (acceptance probabilities from calibration with 50% fixed accept)
