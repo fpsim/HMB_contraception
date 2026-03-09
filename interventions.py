@@ -386,7 +386,7 @@ class HMBTreatmentBase(ss.Intervention):
 
         self._p_continue.set(p_continue)
         continuers = self._p_continue.filter(on_treatment_uids)
-        stops = on_treatment_uids & ~continuers
+        stops = on_treatment_uids - continuers
 
         # Update last cycle tracking: 1.0 = resolved, 0.0 = persisted
         self.hmb_last_cycle[on_treatment_uids] = (~hmb_this_cycle).astype(float)
