@@ -47,11 +47,12 @@ class Menstruation(ss.Connector):
             # HMB prediction
             p_hmb_prone=ss.bernoulli(p=0.486),  # Proportion of menstruating women who experience HMB (sans interventions)
             
-            # Odds ratios to create an age curve (currently calculated from Tanzania (Ibrihim 2023)) ---
+            # Odds ratios to create an age curve (from UW Start) ---
             hmb_age_OR = {
-            "15-19": 3.85, # 1/0.26=3.85
-            "20-44": 0.62, # from Tanzania study, with reference group of "15-19", OR for 20-44 is 0.16; 0.16/0.26=0.62
-            "45-59": 1.00, # from Tanzania study, with reference group of "15-19", OR for 45-59 is 0.26; 
+            "10-19": 1.00, # prevalence of 0.3
+            "20-29": 0.58, # prevalence of 0.2
+            "30-39": 0.58, # prevalence of 0.2
+            "40-49": 1.00, # prevalence of 0.3
             },
 
             hmb_pred=sc.objdict(  # Parameters for HMB prediction
@@ -69,8 +70,8 @@ class Menstruation(ss.Connector):
                 ),
                 anemic=sc.objdict(  # Parameters for anemia
                     # This is converted to an intercept in the logistic regression: -np.log(1/base-1)
-                    base = 0.18,  # Baseline probability of anemia
-                    hmb = -np.log(1/0.35 - 1) + np.log(1/0.18 - 1),
+                    base = 0.215,  # Baseline probability of anemia; UW Start used the prevalence of anemia in general population from GBD 2021 to estimate RR of 1.73 from OR of 2.17 which gives the baseline risk of 21.5%. 
+                    hmb = -np.log(1/0.372 - 1) + np.log(1/0.215 - 1), 
                 ),
                 pain=sc.objdict(  # Parameters for menstrual pain
                     base = 0.1,  # Baseline probability of menstrual pain
@@ -199,13 +200,15 @@ class Menstruation(ss.Connector):
         ages = self.sim.people.age[uids]
         age_adjustments = np.zeros_like(uids, dtype=float)
         # Create age masks
-        age_15_19 = (ages >= 15) & (ages < 20)
-        age_20_44 = (ages >= 20) & (ages < 45)
-        age_45_plus = ages >= 45
+        age_10_19 = (ages >= 15) & (ages < 20)
+        age_20_29 = (ages >= 20) & (ages < 30)
+        age_30_39 = (ages >= 30) & (ages < 40)
+        age_40_plus = ages >= 40
         # Apply log(OR) for each age group
-        age_adjustments[age_15_19] = np.log(self.pars.hmb_age_OR["15-19"])
-        age_adjustments[age_20_44] = np.log(self.pars.hmb_age_OR["20-44"])
-        age_adjustments[age_45_plus] = np.log(self.pars.hmb_age_OR["45-59"])
+        age_adjustments[age_10_19] = np.log(self.pars.hmb_age_OR["10-19"])
+        age_adjustments[age_20_29] = np.log(self.pars.hmb_age_OR["20-29"])
+        age_adjustments[age_30_39] = np.log(self.pars.hmb_age_OR["30-39"])
+        age_adjustments[age_40_plus] = np.log(self.pars.hmb_age_OR["40-49"])
         rhs += age_adjustments
 
         # Calculate the probability

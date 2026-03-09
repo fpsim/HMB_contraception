@@ -40,6 +40,8 @@ class HMBTreatmentBase(ss.Intervention):
         self._p_accept = ss.bernoulli(p=0)
         self._p_adherent = ss.bernoulli(p=0)
         self._p_discontinue = ss.bernoulli(p=0)
+        self._p_continue = ss.bernoulli(p=0)
+        self._p_propensity = ss.uniform()
 
         # Handle parameters
         self.define_pars(
@@ -61,13 +63,16 @@ class HMBTreatmentBase(ss.Intervention):
         self.define_states(
             # Care seeking
             ss.BoolState('seeking_care'),
-            ss.FloatArr('care_seeking_propensity', default=self.pars.care_seeking_dist),
+            ss.FloatArr('adherence_propensity', default=self.pars.care_seeking_dist),
+            ss.BoolState('ever_sought_care'),
+            ss.FloatArr('care_propensity', default=ss.uniform()),  # One-time Uniform(0,1) for care-seeking threshold
 
             # Treatment status
             ss.BoolState('on_treatment'),
             ss.BoolState('tried_treatment'),
             ss.BoolState('offered'),
             ss.BoolState('accepted'),
+            ss.FloatArr('accept_propensity', default=ss.uniform()),  # One-time Uniform(0,1) for acceptance threshold
 
             # Treatment response
             ss.BoolState('responder', default=ss.bernoulli(p=self.pars.efficacy)),
@@ -83,6 +88,12 @@ class HMBTreatmentBase(ss.Intervention):
             ss.FloatArr('ti_nonadherent'),  # Track when non-adherence started (for gradual discontinuation)
         )
 
+        # Use-at-will treatments need cycle-by-cycle continuation tracking
+        if self.pars.use_at_will:
+            self.define_states(
+                ss.FloatArr('hmb_last_cycle', default=float('nan')),
+            )
+
     def _calc_individualized_prob(self, uids, base_prob):
         """
         Calculate individualized probabilities incorporating care_seeking_propensity.
@@ -95,19 +106,32 @@ class HMBTreatmentBase(ss.Intervention):
             Array of individualized probabilities for each UID
         """
         pars = sc.objdict(base=base_prob)
-        p = logistic(self, uids, pars, intercept_scale=self.care_seeking_propensity[uids])
+        p = logistic(self, uids, pars, intercept_scale=self.adherence_propensity[uids])
         return p
 
     def determine_care_seeking(self, uids=None):
         """
-        Determine who seeks care using logistic regression.
+        Determine who seeks care using one-time propensity comparison.
+
+        Each person gets a care_propensity drawn once from Uniform(0,1).
+        Each month, their care-seeking probability is computed via the
+        logistic model (incorporating anemia, pain, base rate).
+        
+        A person seeks care if care_propensity < p_care.
+        
+        This is deterministic given the person's current state:
+        - If you're not anemic/in pain and base is 10%, your p_care ≈ 0.10
+          Only people with propensity < 0.10 seek care.
+        - If you become anemic, p_care rises (e.g., to 0.37),
+          and more people cross the threshold.
+        - But a person with propensity 0.95 will NEVER seek care
+          regardless of condition — creating permanent "never-seekers".
 
         Args:
             uids: UIDs to check. If None, uses eligible individuals not on treatment.
         """
         self.seeking_care[:] = False
         if uids is None:
-            # Eligible: menstruating, non-pregnant HMB women not currently on this treatment
             ppl = self.sim.people
             eligible = (ppl.menstruation.hmb &
                        ppl.menstruation.menstruating &
@@ -119,13 +143,15 @@ class HMBTreatmentBase(ss.Intervention):
         if len(uids) == 0:
             return
 
-        # Calculate care-seeking probability
-        p_care = logistic(self, uids, self.pars.care_behavior,
-                         intercept_scale=self.care_seeking_propensity[uids])
-        self._p_care.set(0)
-        self._p_care.set(p_care)
-        seeks_care = self._p_care.filter(uids)
-        self.seeking_care[seeks_care] = True
+        # Calculate care-seeking probability (changes monthly with anemia/pain status)
+        p_care = logistic(self, uids, self.pars.care_behavior)
+
+        # Deterministic comparison: seek care if propensity < probability
+        seeks = self.care_propensity[uids] < p_care
+        seeks_care_uids = uids[seeks]
+        
+        self.seeking_care[seeks_care_uids] = True
+        self.ever_sought_care[seeks_care_uids] = True
 
         return
 
@@ -252,6 +278,7 @@ class HMBTreatmentBase(ss.Intervention):
         self.offer_treatment()
         self.assess_treatment_effectiveness()
         self.check_adherence()
+        self.check_continuation()
 
     def _pre_step_hook(self):
         """
@@ -270,7 +297,8 @@ class HMBTreatmentBase(ss.Intervention):
         1. Get care seekers
         2. Filter by eligibility (override _get_eligible_for_treatment for custom logic)
         3. Offer treatment (probabilistic)
-        4. Accept treatment (probabilistic, individualized)
+        4. Accept treatment (Each person's accept_propensity is compared against
+                             the treatment's prob_accept. If propensity < prob_accept, they accept.
         5. Start treatment
 
         Subclasses can override _get_eligible_for_treatment() to customize eligibility.
@@ -287,13 +315,10 @@ class HMBTreatmentBase(ss.Intervention):
         if len(offered) > 0:
             self.offered[offered] = True
 
-            # Calculate individualized acceptance probability
-            base_accept_prob = self.pars.prob_accept.pars['p']
-            p_accept = self._calc_individualized_prob(offered, base_accept_prob)
-
-            self._p_accept.set(0)
-            self._p_accept.set(p_accept)
-            accepted = self._p_accept.filter(offered)
+            # Accept if propensity < prob_accept threshold
+            threshold = self.pars.prob_accept.pars['p']
+            accepts = self.accept_propensity[offered] < threshold
+            accepted = offered[accepts]
 
             if len(accepted) > 0:
                 self.accepted[accepted] = True
@@ -323,6 +348,52 @@ class HMBTreatmentBase(ss.Intervention):
         """
         return care_seekers & (~self.tried_treatment | self.was_effective) & ~self.on_treatment
 
+    def check_continuation(self):
+        """
+        Cycle-by-cycle continuation check for use-at-will treatments.
+
+        Each cycle, women on treatment decide whether to continue based on
+        whether HMB was resolved last cycle:
+          - First cycle (no history): p_continue_first_cycle
+          - HMB resolved last cycle:  p_continue_if_resolved
+          - HMB persisted last cycle: p_continue_if_persists
+
+        Only active for use-at-will treatments (NSAIDs, TXA). Pill and hIUD
+        follow FPsim duration and do not use this.
+
+        Those who discontinue have tried_treatment=True and become eligible
+        for the next treatment in the cascade via care-seeking.
+        """
+        if not self.pars.use_at_will:
+            return
+
+        on_treatment_uids = self.on_treatment.uids
+        if len(on_treatment_uids) == 0:
+            return
+
+        hmb_this_cycle = self.sim.people.menstruation.hmb[on_treatment_uids]
+        last_cycle = self.hmb_last_cycle[on_treatment_uids]
+
+        p_continue = np.where(
+            np.isnan(last_cycle),
+            self.pars.p_continue_first_cycle,
+            np.where(
+                last_cycle == 1.0,
+                self.pars.p_continue_if_resolved,
+                self.pars.p_continue_if_persists,
+            )
+        )
+
+        self._p_continue.set(p_continue)
+        continuers = self._p_continue.filter(on_treatment_uids)
+        stops = on_treatment_uids & ~continuers
+
+        # Update last cycle tracking: 1.0 = resolved, 0.0 = persisted
+        self.hmb_last_cycle[on_treatment_uids] = (~hmb_this_cycle).astype(float)
+
+        if len(stops) > 0:
+            self.ti_stop_treatment[stops] = self.ti + 1
+            self.hmb_last_cycle[stops] = np.nan
 
 # ============================================================================
 # Individual treatment classes
@@ -344,9 +415,9 @@ class NSAIDTreatment(HMBTreatmentBase):
 
             # Care-seeking behavior
             care_behavior=sc.objdict(
-                base=0.5,
-                anemic=1,
-                pain=0.25,
+                base=0.2, #from McKinsey 2025 WHI portfolio sizing
+                anemic=0.86, #46% of women who reported 2+ HMB symptoms had every sought care for it (Fraser et al. 2015). The total log-odds to reach 46% is logit(0.46) − logit(base). I'll split it 70/30 in favor of anemia.
+                pain=0.37,
             ),
             care_seeking_dist = ss.normal(1, 1),
 
@@ -363,6 +434,12 @@ class NSAIDTreatment(HMBTreatmentBase):
             # NSAIDs are use-at-will (taken during menstruation only)
             use_at_will=True,
             p_discontinue_nonadherent=0.1,  # 10% chance per timestep of discontinuing when non-adherent
+            
+            # Continuation parameters
+            p_continue_first_cycle=0.6,    # No history yet
+            p_continue_if_resolved=0.9,    # HMB resolved last cycle
+            p_continue_if_persists=0.2,    # HMB persisted last cycle
+
         )
 
         self.update_pars(pars, **kwargs)
@@ -372,12 +449,10 @@ class NSAIDTreatment(HMBTreatmentBase):
 
     def _start_treatment(self, uids):
         """Start NSAID treatment for accepted individuals."""
-        # Set treatment status
         self.on_treatment[uids] = True
         self.ti_start_treatment[uids] = self.ti
         self.treatment_assessed[uids] = False
 
-        # Set duration and stop time
         self.dur_treatment[uids] = self.pars.dur_treatment.rvs(uids)
         self.ti_stop_treatment[uids] = self.ti + self.dur_treatment[uids]
 
@@ -398,9 +473,9 @@ class TXATreatment(HMBTreatmentBase):
 
             # Care-seeking behavior
             care_behavior=sc.objdict(
-                base=0.5,
-                anemic=1,
-                pain=0.25,
+                base=0.2, #from McKinsey 2025 WHI portfolio sizing
+                anemic=0.86, #46% of women who reported 2+ HMB symptoms had every sought care for it (Fraser et al. 2015). The total log-odds to reach 46% is logit(0.46) − logit(base). I'll split it 70/30 in favor of anemia.
+                pain=0.37,
             ),
             care_seeking_dist = ss.normal(1, 1),
 
@@ -417,6 +492,12 @@ class TXATreatment(HMBTreatmentBase):
             # TXA is use-at-will (taken during menstruation only)
             use_at_will=True,
             p_discontinue_nonadherent=0.1,  # 10% chance per timestep of discontinuing when non-adherent
+            
+            # Continuation parameters
+            p_continue_first_cycle=0.6,
+            p_continue_if_resolved=0.9,
+            p_continue_if_persists=0.2,
+
         )
 
         self.update_pars(pars, **kwargs)
@@ -434,6 +515,7 @@ class TXATreatment(HMBTreatmentBase):
         self.ti_stop_treatment[uids] = self.ti + self.dur_treatment[uids]
 
 
+
 class PillTreatment(HMBTreatmentBase):
     """
     Combined oral contraceptive pill for HMB.
@@ -449,9 +531,9 @@ class PillTreatment(HMBTreatmentBase):
             year=2020,
 
             care_behavior=sc.objdict(
-                base=0.5,
-                anemic=1,
-                pain=0.25,
+                base=0.2, #from McKinsey 2025 WHI portfolio sizing
+                anemic=0.86, #46% of women who reported 2+ HMB symptoms had every sought care for it (Fraser et al. 2015). The total log-odds to reach 46% is logit(0.46) − logit(base). I'll split it 70/30 in favor of anemia.
+                pain=0.37,
             ),
             care_seeking_dist = ss.normal(1, 1),
 
@@ -516,9 +598,9 @@ class hIUDTreatment(HMBTreatmentBase):
             year=2020,
 
             care_behavior=sc.objdict(
-                base=0.5,
-                anemic=1,
-                pain=0.25,
+                base=0.2, #from McKinsey 2025 WHI portfolio sizing
+                anemic=0.86, #46% of women who reported 2+ HMB symptoms had every sought care for it (Fraser et al. 2015). The total log-odds to reach 46% is logit(0.46) − logit(base). I'll split it 70/30 in favor of anemia.
+                pain=0.37,
             ),
             care_seeking_dist = ss.normal(1, 1),
 
@@ -593,9 +675,9 @@ class HMBCascade(ss.Intervention):
 
     Uses eligibility functions to ensure proper sequencing:
     - NSAID: First-line treatment for all HMB
-    - TXA: Offered only if tried NSAID
-    - Pill: Offered only if tried NSAID and TXA
-    - hIUD: Offered only if tried NSAID, TXA, and Pill
+    - TXA: Eligible if NSAID was not offered, declined, or tried NSAID
+    - Pill: Eligible if NSAID and TXA were each not offered, declined, or tried NSAID and TXA
+    - hIUD: Eligible if NSAID, TXA, and Pill were each not offered, declined, or tried NSAID and TXA and Pill
 
     Each treatment can also be used independently for component analysis.
     """
@@ -635,9 +717,9 @@ class HMBCascade(ss.Intervention):
 
             # Care-seeking behavior (shared across treatments)
             care_behavior=sc.objdict(
-                base=0.5,
-                anemic=1,
-                pain=0.25,
+                base=0.2, #from McKinsey 2025 WHI portfolio sizing
+                anemic=0.86, #46% of women who reported 2+ HMB symptoms had every sought care for it (Fraser et al. 2015). The total log-odds to reach 46% is logit(0.46) − logit(base). I'll split it 70/30 in favor of anemia.
+                pain=0.37,
             ),
             care_seeking_dist = ss.normal(1, 1),
         )
@@ -667,8 +749,8 @@ class HMBCascade(ss.Intervention):
 
         # Create TXA treatment (requires tried NSAID)
         def txa_eligibility(sim):
-            # Eligible if tried NSAID
-            return nsaid.tried_treatment
+            # Eligible if tried NSAID or offered but refused 
+            return nsaid.tried_treatment | (nsaid.offered & ~nsaid.on_treatment) 
 
         txa = TXATreatment(
             pars=dict(
@@ -684,9 +766,10 @@ class HMBCascade(ss.Intervention):
             eligibility=txa_eligibility,
         )
 
-        # Create pill treatment (requires tried NSAID and TXA)
+        # Create pill treatment (requires tried NSAID and TXA)      
         def pill_eligibility(sim):
-            return nsaid.tried_treatment & txa.tried_treatment
+            # Eligible if tried TXA OR offered but refused/didn't work OR tried NSAID but not continuing and not offered TXA
+            return txa.tried_treatment | (txa.offered & ~txa.on_treatment) | (nsaid.tried_treatment & ~nsaid.on_treatment & ~txa.offered)
 
         pill = PillTreatment(
             pars=dict(
@@ -703,10 +786,11 @@ class HMBCascade(ss.Intervention):
         )
 
         # Create hIUD treatment (requires tried all previous treatments)
-        def hiud_eligibility(sim):
-            return (nsaid.tried_treatment &
-                   txa.tried_treatment &
-                   pill.tried_treatment)
+        def hiud_eligibility(sim):      
+            # Eligible if tried Pill OR offered but refused/didn't work OR tried NSAID but not continuing and not offered TXA 
+            # OR tried TXA but not continuing and not offered Pill
+            return pill.tried_treatment | (pill.offered & ~pill.on_treatment) | (nsaid.tried_treatment & ~nsaid.on_treatment & ~txa.offered) | (txa.tried_treatment & ~txa.on_treatment & ~pill.offered) 
+
 
         hiud = hIUDTreatment(
             pars=dict(

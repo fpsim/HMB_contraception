@@ -36,7 +36,7 @@ def make_severity_linked_sim(seed=0):
     edu = Education()
     cascade = HMBCascade(
         pars=dict(
-            year=2025,
+            year=2026,
             time_to_assess=ss.months(3),
             # Default care_behavior has anemic=1 (increases care-seeking)
         )
@@ -51,7 +51,7 @@ def make_severity_linked_sim(seed=0):
     sim = fp.Sim(
         start=2020,
         stop=2030,
-        n_agents=5000,
+        n_agents=10000,
         total_pop=55_000_000,
         location='kenya',
         education_module=edu,

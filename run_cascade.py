@@ -57,7 +57,7 @@ def make_intervention_sim(seed=0):
     edu = Education()
     cascade = HMBCascade(
         pars=dict(
-            year=2025,
+            year=2026,
             time_to_assess=ss.months(3),  # Assess treatment effectiveness after 3 months
         )
     )
@@ -71,7 +71,7 @@ def make_intervention_sim(seed=0):
     sim = fp.Sim(
         start=2020,
         stop=2030,
-        n_agents=5000,
+        n_agents=10000,
         total_pop=55_000_000,  # Kenya's population for scaling
         location='kenya',
         education_module=edu,
