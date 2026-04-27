@@ -21,7 +21,7 @@ from analyzers import track_care_seeking, track_tx_eff, track_tx_dur, track_hmb_
 # Simulation creation functions
 # ============================================================================
 
-def make_base_sim(seed=0):
+def make_base_sim(seed=10):
     """
     Create baseline simulation without intervention
 
@@ -35,7 +35,7 @@ def make_base_sim(seed=0):
     sim = fp.Sim(
         start=2020,
         stop=2030,
-        n_agents=5000,
+        n_agents=10000,
         total_pop=55_000_000,  # Kenya's population for scaling
         location='kenya',
         education_module=edu,
@@ -47,7 +47,7 @@ def make_base_sim(seed=0):
     return sim
 
 
-def make_intervention_sim(seed=0):
+def make_intervention_sim(seed=10):
     """
     Create simulation with HMB care pathway intervention
 

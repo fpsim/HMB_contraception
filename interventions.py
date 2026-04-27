@@ -422,7 +422,7 @@ class NSAIDTreatment(HMBTreatmentBase):
             care_seeking_dist = ss.normal(1, 1),
 
             # Treatment parameters
-            efficacy=0.5,  # 50% responder rate
+            efficacy=0.33,  # 33% responder rate
             adherence=0.7,
             prob_offer=ss.bernoulli(p=0.9),
             prob_accept=ss.bernoulli(p=0.7),
@@ -480,7 +480,7 @@ class TXATreatment(HMBTreatmentBase):
             care_seeking_dist = ss.normal(1, 1),
 
             # Treatment parameters
-            efficacy=0.6,  # 60% responder rate
+            efficacy=0.45,  # 45% responder rate
             adherence=0.6,
             prob_offer=ss.bernoulli(p=0.9),
             prob_accept=ss.bernoulli(p=0.6),
@@ -537,7 +537,7 @@ class PillTreatment(HMBTreatmentBase):
             ),
             care_seeking_dist = ss.normal(1, 1),
 
-            efficacy=0.7,
+            efficacy=0.59,
             adherence=0.75,
             prob_offer=ss.bernoulli(p=0.9),
             prob_accept=ss.bernoulli(p=0.5),
@@ -604,7 +604,7 @@ class hIUDTreatment(HMBTreatmentBase):
             ),
             care_seeking_dist = ss.normal(1, 1),
 
-            efficacy=0.8,
+            efficacy=0.88,
             adherence=0.85,
             prob_offer=ss.bernoulli(p=0.9),
             prob_accept=ss.bernoulli(p=0.5),
@@ -691,25 +691,25 @@ class HMBCascade(ss.Intervention):
 
             # Treatment-specific parameters
             nsaid=sc.objdict(
-                efficacy=0.5,
+                efficacy=0.33,  #from HIUD HMB Clinical Value Prop FINAL 110125, matching values Lauren used in her model 
                 adherence=0.7,
                 prob_offer=ss.bernoulli(p=0.9),
                 prob_accept=ss.bernoulli(p=0.7),
             ),
             txa=sc.objdict(
-                efficacy=0.6,
+                efficacy=0.45, #
                 adherence=0.6,
                 prob_offer=ss.bernoulli(p=0.9),
                 prob_accept=ss.bernoulli(p=0.6),
             ),
             pill=sc.objdict(
-                efficacy=0.7,
+                efficacy=0.59,
                 adherence=0.75,
                 prob_offer=ss.bernoulli(p=0.9),
                 prob_accept=ss.bernoulli(p=0.5),
             ),
             hiud=sc.objdict(
-                efficacy=0.8,
+                efficacy=0.88,
                 adherence=0.85,
                 prob_offer=ss.bernoulli(p=0.9),
                 prob_accept=ss.bernoulli(p=0.5),
