@@ -6,11 +6,11 @@ Structure:
   3 RR lines per panel + counterfactual (dashed) per RR
 
 All intervention sims:
-  2020–2025: status quo (10% care-seeking, NSAID/TXA/Pill, no hIUD)
-  2026–2030: mid care-seeking (20%) + hIUD at specified uptake level
+  2017–2025: status quo (10% care-seeking, NSAID/TXA/Pill, no hIUD)
+  2026–2035: mid care-seeking (20%) + hIUD at specified uptake level
 
 Counterfactual sims:
-  2020–2030: status quo throughout (10% care-seeking, no hIUD)
+  2017–2035: status quo throughout (10% care-seeking, no hIUD)
 
 RR varies from start of simulation (disease parameter).
 """
@@ -112,6 +112,13 @@ def rr_to_logistic_coeff(rr, p_base=P_BASE):
     return (-np.log(1 / p_hmb - 1)) - (-np.log(1 / p_base - 1))
 
 
+def _mask_pre_intv(years, values):
+    """Set values before INTV_YEAR to NaN so only post-intervention is plotted."""
+    masked = np.array(values, dtype=float).copy()
+    masked[years < INTV_YEAR] = np.nan
+    return masked
+
+
 def make_menstruation(rr):
     coeff = rr_to_logistic_coeff(rr)
     return Menstruation(pars={
@@ -147,7 +154,7 @@ def make_counterfactual():
 
 def make_pool_intervention(hiud_scenario):
     """
-    2020–2025: status quo (10% care, no hIUD, 70% receipt)
+    2017–2025: status quo (10% care, no hIUD, 70% receipt)
     2026+: mid care-seeking (20%) + hIUD at specified level
     """
     scen = HIUD_SCENARIOS[hiud_scenario]
@@ -157,7 +164,7 @@ def make_pool_intervention(hiud_scenario):
         intv_year=INTV_YEAR,
         care_behavior_pre=CARE_PRE,
         care_behavior_post=CARE_POST,
-        prob_offer_post=scen.prob_offer_post,  
+        prob_offer_post=scen.prob_offer_post,
         tx_weights_pre=sc.objdict(nsaid=0.50, txa=0.25, pill=0.25, hiud=0.0),
         tx_weights_post=scen.tx_weights_post,
         nsaid=sc.objdict(efficacy=0.33, adherence=0.80),
@@ -250,11 +257,22 @@ def run_sensitivity(force_rerun=True):
 def compute_pct_reduction(raw, rr_name, hiud_name):
     """
     % reduction in annual anemia: intervention vs counterfactual at the same RR.
-
-    Computed per-seed then aggregated, so stochastic noise cancels.
     """
     cf = np.array(raw[rr_name]['counterfactual']['annual'])
     intv = np.array(raw[rr_name][hiud_name]['annual'])
+    averted = cf - intv
+    pct = np.where(cf > 0, averted / cf * 100, np.nan)
+    return {
+        'mean':  np.nanmean(pct, axis=0),
+        'lower': np.nanpercentile(pct, 2.5, axis=0),
+        'upper': np.nanpercentile(pct, 97.5, axis=0),
+    }
+
+
+def compute_pct_reduction_hmb(raw, rr_name, hiud_name):
+    """% reduction in HMB-specific anemia (where the signal lives)."""
+    cf = np.array([_annualize(m) for m in raw[rr_name]['counterfactual']['hmb_monthly']])
+    intv = np.array([_annualize(m) for m in raw[rr_name][hiud_name]['hmb_monthly']])
     averted = cf - intv
     pct = np.where(cf > 0, averted / cf * 100, np.nan)
     return {
@@ -268,12 +286,12 @@ def compute_pct_reduction(raw, rr_name, hiud_name):
 
 def plot_monthly_panels(raw, years_monthly):
     """
-    3 panels (one per hIUD level). Per panel: 3 RR lines (solid)
-    + 3 counterfactual lines (dashed, same color).
+    3 panels (one per hIUD level). Per panel: 3 RR counterfactual lines (dashed, full)
+    + 3 RR intervention lines (solid, post-2026 only).
     """
     fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
     fig.suptitle('Monthly anemia cases by hIUD uptake\n'
-                 'Solid = intervention, dashed = counterfactual (no hIUD)',
+                 'Solid = intervention (post-2026), dashed = status quo',
                  fontsize=13)
 
     for idx, (hiud_name, scen) in enumerate(HIUD_SCENARIOS.items()):
@@ -282,19 +300,22 @@ def plot_monthly_panels(raw, years_monthly):
         for rr_name in rr_values:
             color = rr_colors[rr_name]
 
-            # Counterfactual (dashed)
+            # Counterfactual (dashed, full timeline)
             cf = np.array(raw[rr_name]['counterfactual']['monthly'])
             cf_mean = cf.mean(axis=0)
-            ax.plot(years_monthly, cf_mean, color=color, ls='--', lw=1.2, alpha=0.7)
+            ax.plot(years_monthly, cf_mean, color=color, ls='--', lw=1.2, alpha=0.7,
+                    label=f'{rr_labels[rr_name]} (status quo)')
 
-            # Intervention (solid)
+            # Intervention (solid, post-2026 only)
             intv = np.array(raw[rr_name][hiud_name]['monthly'])
             intv_mean = intv.mean(axis=0)
             intv_std = intv.std(axis=0)
-            ax.plot(years_monthly, intv_mean, color=color, lw=1.5,
-                    label=rr_labels[rr_name])
-            ax.fill_between(years_monthly, intv_mean - intv_std,
-                            intv_mean + intv_std, color=color, alpha=0.12)
+            mean_masked = _mask_pre_intv(years_monthly, intv_mean)
+            std_masked = _mask_pre_intv(years_monthly, intv_std)
+            ax.plot(years_monthly, mean_masked, color=color, lw=1.5,
+                    label=f'{rr_labels[rr_name]} (intv)')
+            ax.fill_between(years_monthly, mean_masked - std_masked,
+                            mean_masked + std_masked, color=color, alpha=0.12)
 
         ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
         ax.set_xlabel('Year')
@@ -303,7 +324,7 @@ def plot_monthly_panels(raw, years_monthly):
         ax.set_title(scen.label)
         ax.set_xlim([PLOT_START, STOP]); ax.set_ylim(bottom=0)
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-        ax.legend(frameon=False, fontsize=9)
+        ax.legend(frameon=False, fontsize=7)
         sc.SIticks(ax=ax)
 
     plt.tight_layout()
@@ -315,13 +336,15 @@ def plot_monthly_panels(raw, years_monthly):
 
 def plot_annual_panels(raw, years):
     """
-    3 panels (one per hIUD level). Per panel: 3 RR lines (solid)
-    + 3 counterfactual lines (dashed).
+    3 panels (one per hIUD level). Per panel: 3 RR counterfactual lines (dashed, full)
+    + 3 RR intervention lines (solid, post-2026 only).
     """
     fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
     fig.suptitle('Annual anemia cases by hIUD uptake\n'
-                 'Solid = intervention, dashed = counterfactual',
+                 'Solid = intervention (post-2026), dashed = status quo',
                  fontsize=13)
+
+    post_mask = years >= INTV_YEAR
 
     for idx, (hiud_name, scen) in enumerate(HIUD_SCENARIOS.items()):
         ax = axes[idx]
@@ -329,18 +352,22 @@ def plot_annual_panels(raw, years):
         for rr_name in rr_values:
             color = rr_colors[rr_name]
 
-            # Counterfactual
+            # Counterfactual (dashed, full timeline)
             cf = np.array(raw[rr_name]['counterfactual']['annual'])
             cf_mean = cf.mean(axis=0)
-            ax.plot(years, cf_mean, color=color, ls='--', lw=1.5, alpha=0.7)
+            ax.plot(years, cf_mean, color=color, ls='--', lw=1.5, alpha=0.7,
+                    label=f'{rr_labels[rr_name]} (status quo)')
 
-            # Intervention
+            # Intervention (solid, post-2026 only)
             intv = np.array(raw[rr_name][hiud_name]['annual'])
             intv_mean = intv.mean(axis=0)
             intv_std = intv.std(axis=0)
-            ax.errorbar(years, intv_mean, yerr=intv_std, color=color,
+            mean_masked = np.where(post_mask, intv_mean, np.nan)
+            std_masked = np.where(post_mask, intv_std, np.nan)
+            ax.errorbar(years[post_mask], intv_mean[post_mask],
+                        yerr=intv_std[post_mask], color=color,
                         lw=2, marker='o', capsize=3, markersize=4,
-                        label=rr_labels[rr_name])
+                        label=f'{rr_labels[rr_name]} (intv)')
 
         ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
         ax.set_xlabel('Year')
@@ -349,7 +376,7 @@ def plot_annual_panels(raw, years):
         ax.set_title(scen.label)
         ax.set_xlim([PLOT_START - 0.5, STOP + 0.5]); ax.set_ylim(bottom=0)
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-        ax.legend(frameon=False, fontsize=9)
+        ax.legend(frameon=False, fontsize=7)
         sc.SIticks(ax=ax)
 
     plt.tight_layout()
@@ -363,7 +390,7 @@ def plot_hmb_anemia_panels(raw, years_monthly):
     """3 panels: monthly anemia among HMB women, with counterfactual."""
     fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
     fig.suptitle('Anemia among HMB women by hIUD uptake\n'
-                 'Solid = intervention, dashed = counterfactual',
+                 'Solid = intervention (post-2026), dashed = status quo',
                  fontsize=13)
 
     for idx, (hiud_name, scen) in enumerate(HIUD_SCENARIOS.items()):
@@ -372,19 +399,22 @@ def plot_hmb_anemia_panels(raw, years_monthly):
         for rr_name in rr_values:
             color = rr_colors[rr_name]
 
-            # Counterfactual
+            # Counterfactual (dashed, full timeline)
             cf = np.array(raw[rr_name]['counterfactual']['hmb_monthly'])
             cf_mean = cf.mean(axis=0)
-            ax.plot(years_monthly, cf_mean, color=color, ls='--', lw=1.2, alpha=0.7)
+            ax.plot(years_monthly, cf_mean, color=color, ls='--', lw=1.2, alpha=0.7,
+                    label=f'{rr_labels[rr_name]} (status quo)')
 
-            # Intervention
+            # Intervention (solid, post-2026 only)
             intv = np.array(raw[rr_name][hiud_name]['hmb_monthly'])
             intv_mean = intv.mean(axis=0)
             intv_std = intv.std(axis=0)
-            ax.plot(years_monthly, intv_mean, color=color, lw=1.5,
-                    label=rr_labels[rr_name])
-            ax.fill_between(years_monthly, intv_mean - intv_std,
-                            intv_mean + intv_std, color=color, alpha=0.12)
+            mean_masked = _mask_pre_intv(years_monthly, intv_mean)
+            std_masked = _mask_pre_intv(years_monthly, intv_std)
+            ax.plot(years_monthly, mean_masked, color=color, lw=1.5,
+                    label=f'{rr_labels[rr_name]} (intv)')
+            ax.fill_between(years_monthly, mean_masked - std_masked,
+                            mean_masked + std_masked, color=color, alpha=0.12)
 
         ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
         ax.set_xlabel('Year')
@@ -393,7 +423,7 @@ def plot_hmb_anemia_panels(raw, years_monthly):
         ax.set_title(scen.label)
         ax.set_xlim([PLOT_START, STOP]); ax.set_ylim(bottom=0)
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-        ax.legend(frameon=False, fontsize=9)
+        ax.legend(frameon=False, fontsize=7)
         sc.SIticks(ax=ax)
 
     plt.tight_layout()
@@ -406,9 +436,6 @@ def plot_hmb_anemia_panels(raw, years_monthly):
 def plot_pct_reduction_by_hiud(raw, years):
     """
     3 panels (one per hIUD level): % reduction vs counterfactual, by RR.
-
-    This is the key result plot. Shows how much anemia is averted
-    by introducing hIUD, and how that depends on the RR assumption.
     """
     post_mask = years >= INTV_YEAR
 
@@ -421,7 +448,6 @@ def plot_pct_reduction_by_hiud(raw, years):
         ax = axes[idx]
 
         for rr_name in rr_values:
-            s = compute_pct_reduction(raw, rr_name, hiud_name)
             s = compute_pct_reduction_hmb(raw, rr_name, hiud_name)
 
             mean = np.where(post_mask, s['mean'], np.nan)
@@ -452,9 +478,6 @@ def plot_pct_reduction_by_hiud(raw, years):
 def plot_pct_reduction_by_rr(raw, years):
     """
     3 panels (one per RR): % reduction vs counterfactual, by hIUD level.
-
-    Alternative view: for a given RR assumption, how much does
-    increasing hIUD uptake help?
     """
     post_mask = years >= INTV_YEAR
 
@@ -467,7 +490,6 @@ def plot_pct_reduction_by_rr(raw, years):
         ax = axes[idx]
 
         for hiud_name, scen in HIUD_SCENARIOS.items():
-            s = compute_pct_reduction(raw, rr_name, hiud_name)
             s = compute_pct_reduction_hmb(raw, rr_name, hiud_name)
 
             mean = np.where(post_mask, s['mean'], np.nan)
@@ -493,19 +515,6 @@ def plot_pct_reduction_by_rr(raw, years):
     fig.savefig(outpath, dpi=300, bbox_inches='tight')
     print(f"Saved: {outpath}")
     return fig
-
-
-def compute_pct_reduction_hmb(raw, rr_name, hiud_name):
-    """% reduction in HMB-specific anemia (where the signal lives)."""
-    cf = np.array([_annualize(m) for m in raw[rr_name]['counterfactual']['hmb_monthly']])
-    intv = np.array([_annualize(m) for m in raw[rr_name][hiud_name]['hmb_monthly']])
-    averted = cf - intv
-    pct = np.where(cf > 0, averted / cf * 100, np.nan)
-    return {
-        'mean':  np.nanmean(pct, axis=0),
-        'lower': np.nanpercentile(pct, 2.5, axis=0),
-        'upper': np.nanpercentile(pct, 97.5, axis=0),
-    }
 
 
 # ── Summary table ──────────────────────────────────────────────────────────────
@@ -546,7 +555,6 @@ def print_summary(raw, years):
         print(f"  {'─'*50}")
 
         for rr_name in rr_values:
-            s = compute_pct_reduction(raw, rr_name, hiud_name)
             s = compute_pct_reduction_hmb(raw, rr_name, hiud_name)
             m = np.nanmean(s['mean'][post_mask])
             lo = np.nanmean(s['lower'][post_mask])
@@ -578,7 +586,3 @@ if __name__ == '__main__':
 
     # Summary
     print_summary(raw, years_full)
-    
-    raw = sc.loadobj('results_anemia_sa/anemia_sa_hiud_rr_cf_raw.obj')
-    plot_pct_reduction_by_hiud(raw, years_full)
-    plot_pct_reduction_by_rr(raw, years_full)
