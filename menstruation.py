@@ -45,7 +45,8 @@ class Menstruation(ss.Connector):
             eff_hyst_menopause=ss.normal(-5, 1),  # Adjustment for age of menopause if hysterectomy occurs
 
             # HMB prediction
-            p_hmb_prone=ss.bernoulli(p=0.486),  # Proportion of menstruating women who experience HMB (sans interventions)
+            p_hmb_prone=ss.bernoulli(p=0.53),  # 0.486 Proportion of menstruating women who experience HMB (sans interventions) which reflects some baseline level of treatment. 
+            # Calibration to the baseline scenario shows that prevalence should be 53% so with the baseline treatment the p becomes 48.6%
             
             # Odds ratios to create an age curve (from UW Start) ---
             hmb_age_OR = {
@@ -75,7 +76,8 @@ class Menstruation(ss.Connector):
                 ),
                 pain=sc.objdict(  # Parameters for menstrual pain
                     base = 0.1,  # Baseline probability of menstrual pain
-                    hmb = 1.5,  # Effect of HMB on menstrual pain - placeholder: prob of pain is 1/(1+np.exp(-(-np.log(1/0.1 -1)+1.5))) = 0.332
+                    hmb = 3.36,  # Effect of HMB on menstrual pain - UW Start Estimated proportion of women with HMB that have dysmenorrhea: 76.2% (95% CI:59.4–89.6), 
+                    # prob of pain is 1/(1+np.exp(-(-np.log(1/0.1 -1)+3.35))) = 0.762
                 ),
             ),
 
