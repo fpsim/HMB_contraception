@@ -22,7 +22,7 @@ from interventions_pool import HMBCounterfactual
 from analyzers import track_hmb_anemia
 
 # ── Settings ──
-START = 2020
+START = 2017
 STOP = 2030
 N_SEEDS = 5
 TARGET_PREV = 0.48

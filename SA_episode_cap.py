@@ -42,9 +42,10 @@ P_BASE      = 0.215
 P_HMB_PRONE = 0.53
 RR_MID      = 1.73
 N_SEEDS     = 10
-START       = 2020
-STOP        = 2030
+START       = 2017
+STOP        = 2035
 INTV_YEAR   = 2026
+PLOT_START  = 2020
 
 EPISODE_CAPS = [3, 6]
 
@@ -80,6 +81,13 @@ def rr_to_logistic_coeff(rr, p_base=P_BASE):
     return (-np.log(1 / p_hmb - 1)) - (-np.log(1 / p_base - 1))
 
 
+def _mask_pre_intv(years, values):
+    """Set values before INTV_YEAR to NaN so only post-intervention is plotted."""
+    masked = np.array(values, dtype=float).copy()
+    masked[years < INTV_YEAR] = np.nan
+    return masked
+
+
 def make_menstruation():
     coeff = rr_to_logistic_coeff(RR_MID)
     return Menstruation(pars={
@@ -94,7 +102,7 @@ def make_menstruation():
 
 def make_intervention(max_episodes):
     return HMBPool(pars=dict(
-        year=2020,
+        year=2017,
         intv_year=INTV_YEAR,
         care_behavior_pre=CARE_PRE,
         care_behavior_post=CARE_POST,
@@ -112,6 +120,7 @@ def make_intervention(max_episodes):
 
 def make_counterfactual(max_episodes):
     return HMBCounterfactual(pars=dict(
+        year=2017,
         care_behavior_pre=CARE_PRE,
         care_behavior_post=CARE_PRE,
         max_care_episodes=max_episodes,
@@ -223,35 +232,44 @@ def compute_pct_reduction(raw, cap, outcome='anemia_hmb_annual'):
 # ── Plots ──────────────────────────────────────────────────────────────────────
 
 def plot_hmb_prevalence(raw, years_monthly):
-    """HMB prevalence: counterfactual + intervention for each cap."""
+    """HMB prevalence: counterfactual + intervention for each cap.
+    Only status quo shown before INTV_YEAR."""
     fig, axes = plt.subplots(1, 2, figsize=(16, 5))
     fig.suptitle(f'HMB prevalence by max care-seeking episodes\n'
                  f'Mid care (20%) + Mid hIUD (25%), mid RR ({RR_MID})', fontsize=13)
 
     # Left: absolute
     ax = axes[0]
-    for cap in EPISODE_CAPS:
-        cf = np.array(raw[f'counterfactual_cap{cap}']['hmb_prev_monthly'])
-        intv = np.array(raw[f'intervention_cap{cap}']['hmb_prev_monthly'])
 
-        ax.plot(years_monthly, cf.mean(axis=0), color=CAP_COLORS[cap], ls='--', lw=1.5,
-                label=f'Status quo (max {cap})')
-        ax.plot(years_monthly, intv.mean(axis=0), color=CAP_COLORS[cap], lw=2,
-                label=f'Intervention (max {cap})')
-        ax.fill_between(years_monthly, intv.mean(axis=0) - intv.std(axis=0),
-                        intv.mean(axis=0) + intv.std(axis=0),
+    # Plot ONE status quo line (they overlap pre-2026; use cap=3 as reference)
+    cf_ref = np.array(raw['counterfactual_cap3']['hmb_prev_monthly'])
+    ax.plot(years_monthly, cf_ref.mean(axis=0), color='#6c757d', ls='--', lw=2,
+            label='Status quo')
+
+    # Intervention lines: post-intervention only
+    for cap in EPISODE_CAPS:
+        intv = np.array(raw[f'intervention_cap{cap}']['hmb_prev_monthly'])
+        mean = intv.mean(axis=0)
+        std = intv.std(axis=0)
+        mean_masked = _mask_pre_intv(years_monthly, mean)
+        std_masked = _mask_pre_intv(years_monthly, std)
+
+        ax.plot(years_monthly, mean_masked, color=CAP_COLORS[cap], lw=2,
+                label=f'Intervention ({CAP_LABELS[cap]})')
+        ax.fill_between(years_monthly, mean_masked - std_masked,
+                        mean_masked + std_masked,
                         color=CAP_COLORS[cap], alpha=0.12)
 
     ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
     ax.set_xlabel('Year'); ax.set_ylabel('HMB prevalence')
     ax.set_title('Absolute')
-    ax.set_xlim([START, STOP])
+    ax.set_xlim([PLOT_START, STOP])
     ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
     ax.legend(frameon=False, fontsize=8)
 
     # Right: % reduction
     ax = axes[1]
-    n_years = len(raw[f'counterfactual_cap3']['hmb_prev_annual'][0])
+    n_years = len(raw['counterfactual_cap3']['hmb_prev_annual'][0])
     years_full = np.arange(START, START + n_years)
     post_mask = years_full >= INTV_YEAR
 
@@ -267,7 +285,7 @@ def plot_hmb_prevalence(raw, years_monthly):
     ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
     ax.set_xlabel('Year'); ax.set_ylabel('% reduction vs status quo')
     ax.set_title('% reduction in HMB prevalence')
-    ax.set_xlim([START, STOP]); ax.set_ylim(bottom=0)
+    ax.set_xlim([PLOT_START, STOP]); ax.set_ylim(bottom=0)
     ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
     ax.legend(frameon=False, fontsize=9)
 
@@ -278,36 +296,45 @@ def plot_hmb_prevalence(raw, years_monthly):
 
 
 def plot_anemia(raw, years_monthly):
-    """Anemia among HMB women: counterfactual + intervention for each cap."""
+    """Anemia among HMB women: counterfactual + intervention for each cap.
+    Only status quo shown before INTV_YEAR."""
     fig, axes = plt.subplots(1, 2, figsize=(16, 5))
     fig.suptitle(f'HMB-related anemia by max care-seeking episodes\n'
                  f'Mid care (20%) + Mid hIUD (25%), mid RR ({RR_MID})', fontsize=13)
 
     # Left: absolute
     ax = axes[0]
-    for cap in EPISODE_CAPS:
-        cf = np.array(raw[f'counterfactual_cap{cap}']['anemia_hmb_monthly'])
-        intv = np.array(raw[f'intervention_cap{cap}']['anemia_hmb_monthly'])
 
-        ax.plot(years_monthly, cf.mean(axis=0), color=CAP_COLORS[cap], ls='--', lw=1.5,
-                label=f'Status quo (max {cap})')
-        ax.plot(years_monthly, intv.mean(axis=0), color=CAP_COLORS[cap], lw=2,
-                label=f'Intervention (max {cap})')
-        ax.fill_between(years_monthly, intv.mean(axis=0) - intv.std(axis=0),
-                        intv.mean(axis=0) + intv.std(axis=0),
+    # Plot ONE status quo line
+    cf_ref = np.array(raw['counterfactual_cap3']['anemia_hmb_monthly'])
+    ax.plot(years_monthly, cf_ref.mean(axis=0), color='#6c757d', ls='--', lw=2,
+            label='Status quo')
+
+    # Intervention lines: post-intervention only
+    for cap in EPISODE_CAPS:
+        intv = np.array(raw[f'intervention_cap{cap}']['anemia_hmb_monthly'])
+        mean = intv.mean(axis=0)
+        std = intv.std(axis=0)
+        mean_masked = _mask_pre_intv(years_monthly, mean)
+        std_masked = _mask_pre_intv(years_monthly, std)
+
+        ax.plot(years_monthly, mean_masked, color=CAP_COLORS[cap], lw=2,
+                label=f'Intervention ({CAP_LABELS[cap]})')
+        ax.fill_between(years_monthly, mean_masked - std_masked,
+                        mean_masked + std_masked,
                         color=CAP_COLORS[cap], alpha=0.12)
 
     ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
     ax.set_xlabel('Year'); ax.set_ylabel('Monthly anemia cases (HMB women)')
     ax.set_title('Absolute')
-    ax.set_xlim([START, STOP]); ax.set_ylim(bottom=0)
+    ax.set_xlim([PLOT_START, STOP]); ax.set_ylim(bottom=0)
     ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
     ax.legend(frameon=False, fontsize=8)
     sc.SIticks(ax=ax)
 
     # Right: % reduction
     ax = axes[1]
-    n_years = len(raw[f'counterfactual_cap3']['anemia_hmb_annual'][0])
+    n_years = len(raw['counterfactual_cap3']['anemia_hmb_annual'][0])
     years_full = np.arange(START, START + n_years)
     post_mask = years_full >= INTV_YEAR
 
@@ -323,7 +350,7 @@ def plot_anemia(raw, years_monthly):
     ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
     ax.set_xlabel('Year'); ax.set_ylabel('% reduction vs status quo')
     ax.set_title('% reduction in HMB-related anemia')
-    ax.set_xlim([START, STOP]); ax.set_ylim(bottom=0)
+    ax.set_xlim([PLOT_START, STOP]); ax.set_ylim(bottom=0)
     ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
     ax.legend(frameon=False, fontsize=9)
 
@@ -396,3 +423,4 @@ if __name__ == '__main__':
 
     # Summary
     print_summary(raw)
+    raw = sc.loadobj('results_episode_sa/episode_cap_sa_raw.obj')

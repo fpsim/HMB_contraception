@@ -40,9 +40,10 @@ for d in [PLOTFOLDER, OUTFOLDER]:
 P_BASE      = 0.215
 P_HMB_PRONE = 0.53
 N_SEEDS     = 10
-START       = 2020
-STOP        = 2030
+START       = 2017
+STOP        = 2035
 INTV_YEAR   = 2026
+PLOT_START  = 2020
 
 # ── RR scenarios ──
 rr_values = {
@@ -124,10 +125,23 @@ def make_menstruation(rr):
 
 
 def make_counterfactual():
-    """Status quo throughout: 10% care, no hIUD, never shifts."""
-    return HMBCounterfactual(pars=dict(
+    return HMBPool(pars=dict(
+        year=2017,
+        intv_year=INTV_YEAR,
+
         care_behavior_pre=CARE_PRE,
-        care_behavior_post=CARE_PRE,  # Same as pre — never changes
+        care_behavior_post=CARE_PRE,          # no change at 2026
+
+        prob_offer_pre=0.70,
+        prob_offer_post=0.70,                 # stays the same
+
+        tx_weights_pre=sc.objdict(nsaid=50.0, txa=25.0, pill=25.0, hiud=0.0),
+        tx_weights_post=sc.objdict(nsaid=50.0, txa=25.0, pill=25.0, hiud=0.0),
+
+        nsaid=sc.objdict(efficacy=0.33, adherence=0.80),
+        txa=sc.objdict(efficacy=0.45, adherence=0.70),
+        pill=sc.objdict(efficacy=0.59, adherence=0.80),
+        hiud=sc.objdict(efficacy=0.88, adherence=1.00),
     ))
 
 
@@ -139,7 +153,7 @@ def make_pool_intervention(hiud_scenario):
     scen = HIUD_SCENARIOS[hiud_scenario]
 
     return HMBPool(pars=dict(
-        year=2020,
+        year=2017,
         intv_year=INTV_YEAR,
         care_behavior_pre=CARE_PRE,
         care_behavior_post=CARE_POST,
@@ -287,7 +301,7 @@ def plot_monthly_panels(raw, years_monthly):
         if idx == 0:
             ax.set_ylabel('Monthly anemia cases')
         ax.set_title(scen.label)
-        ax.set_xlim([START, STOP]); ax.set_ylim(bottom=0)
+        ax.set_xlim([PLOT_START, STOP]); ax.set_ylim(bottom=0)
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.legend(frameon=False, fontsize=9)
         sc.SIticks(ax=ax)
@@ -333,7 +347,7 @@ def plot_annual_panels(raw, years):
         if idx == 0:
             ax.set_ylabel('Annual anemia cases')
         ax.set_title(scen.label)
-        ax.set_xlim([START - 0.5, STOP + 0.5]); ax.set_ylim(bottom=0)
+        ax.set_xlim([PLOT_START - 0.5, STOP + 0.5]); ax.set_ylim(bottom=0)
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.legend(frameon=False, fontsize=9)
         sc.SIticks(ax=ax)
@@ -377,7 +391,7 @@ def plot_hmb_anemia_panels(raw, years_monthly):
         if idx == 0:
             ax.set_ylabel('Monthly anemia cases (HMB women)')
         ax.set_title(scen.label)
-        ax.set_xlim([START, STOP]); ax.set_ylim(bottom=0)
+        ax.set_xlim([PLOT_START, STOP]); ax.set_ylim(bottom=0)
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.legend(frameon=False, fontsize=9)
         sc.SIticks(ax=ax)
@@ -424,7 +438,7 @@ def plot_pct_reduction_by_hiud(raw, years):
         if idx == 0:
             ax.set_ylabel('% reduction vs counterfactual')
         ax.set_title(scen.label)
-        ax.set_xlim([START, STOP]); ax.set_ylim(bottom=0)
+        ax.set_xlim([PLOT_START, STOP]); ax.set_ylim(bottom=0)
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.legend(frameon=False, fontsize=9)
 
@@ -470,7 +484,7 @@ def plot_pct_reduction_by_rr(raw, years):
         if idx == 0:
             ax.set_ylabel('% reduction vs counterfactual')
         ax.set_title(rr_labels[rr_name])
-        ax.set_xlim([START, STOP]); ax.set_ylim(bottom=0)
+        ax.set_xlim([PLOT_START, STOP]); ax.set_ylim(bottom=0)
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.legend(frameon=False, fontsize=9)
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Apr 24 15:18:22 2026
+Created on Wed Apr 29 15:45:02 2026
 
 @author: navidehno
 """
@@ -55,10 +55,10 @@ P_BASE      = 0.215
 P_HMB_PRONE = 0.53
 RR_MID      = 1.73
 N_SEEDS     = 10
-START       = 2020
-STOP        = 2030
+START       = 2017
+STOP        = 2035
 INTV_YEAR   = 2026
-
+PLOT_START  = 2020
 
 # ── Care-seeking levels ────────────────────────────────────────────────────────
 
@@ -146,6 +146,13 @@ def rr_to_logistic_coeff(rr, p_base=P_BASE):
     return (-np.log(1 / p_hmb - 1)) - (-np.log(1 / p_base - 1))
 
 
+def _mask_pre_intv(years, values):
+    """Set values before INTV_YEAR to NaN so only post-intervention is plotted."""
+    masked = np.array(values, dtype=float).copy()
+    masked[years < INTV_YEAR] = np.nan
+    return masked
+
+
 def make_menstruation():
     coeff = rr_to_logistic_coeff(RR_MID)
     return Menstruation(pars={
@@ -167,7 +174,7 @@ def make_intervention(care_name, hiud_name):
     hiud_info = HIUD_LEVELS[hiud_name]
 
     return HMBPool(pars=dict(
-        year=2020,
+        year=2017,
         intv_year=INTV_YEAR,
 
         care_behavior_pre=CARE_PRE,
@@ -187,9 +194,23 @@ def make_intervention(care_name, hiud_name):
 
 
 def make_counterfactual():
-    return HMBCounterfactual(pars=dict(
+    return HMBPool(pars=dict(
+        year=2017,
+        intv_year=INTV_YEAR,
+
         care_behavior_pre=CARE_PRE,
-        care_behavior_post=CARE_PRE,
+        care_behavior_post=CARE_PRE,          # no change at 2026
+
+        prob_offer_pre=0.70,
+        prob_offer_post=0.70,                 # stays the same
+
+        tx_weights_pre=sc.objdict(nsaid=50.0, txa=25.0, pill=25.0, hiud=0.0),
+        tx_weights_post=sc.objdict(nsaid=50.0, txa=25.0, pill=25.0, hiud=0.0),
+
+        nsaid=sc.objdict(efficacy=0.33, adherence=0.80),
+        txa=sc.objdict(efficacy=0.45, adherence=0.70),
+        pill=sc.objdict(efficacy=0.59, adherence=0.80),
+        hiud=sc.objdict(efficacy=0.88, adherence=1.00),
     ))
 
 
@@ -320,7 +341,8 @@ def compute_abs_reduction(raw, scen_key, outcome='anemia_hmb_annual'):
 # ── Plots ──────────────────────────────────────────────────────────────────────
 
 def plot_panels_by_care(raw, years_monthly, outcome, ylabel, title_prefix, filename):
-    """3 panels (base/mid/high care). Per panel: counterfactual + 3 hIUD lines."""
+    """3 panels (base/mid/high care). Per panel: counterfactual + 3 hIUD lines.
+    Scenario lines are masked before INTV_YEAR so only status quo shows pre-intervention."""
     fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
     fig.suptitle(f'{title_prefix}\n'
                  f'Status quo before {INTV_YEAR}, intervention after. Mid RR ({RR_MID})',
@@ -329,18 +351,22 @@ def plot_panels_by_care(raw, years_monthly, outcome, ylabel, title_prefix, filen
     for idx, (care_name, care_info) in enumerate(CARE_LEVELS.items()):
         ax = axes[idx]
 
+        # Status quo: full line
         cf_arr = np.array(raw['counterfactual'][outcome])
         ax.plot(years_monthly, cf_arr.mean(axis=0), color='#6c757d', ls='--', lw=2,
                 label='Status quo')
 
+        # Scenario lines: post-intervention only
         for hiud_name, hiud_info in HIUD_LEVELS.items():
             key = f'{care_name}_{hiud_name}'
             arr = np.array(raw[key][outcome])
             mean = arr.mean(axis=0)
             std = arr.std(axis=0)
-            ax.plot(years_monthly, mean, color=CARE_COLORS[care_name][hiud_name],
+            mean_masked = _mask_pre_intv(years_monthly, mean)
+            std_masked = _mask_pre_intv(years_monthly, std)
+            ax.plot(years_monthly, mean_masked, color=CARE_COLORS[care_name][hiud_name],
                     lw=1.8, label=hiud_info.label)
-            ax.fill_between(years_monthly, mean - std, mean + std,
+            ax.fill_between(years_monthly, mean_masked - std_masked, mean_masked + std_masked,
                             color=CARE_COLORS[care_name][hiud_name], alpha=0.15)
 
         ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
@@ -348,7 +374,54 @@ def plot_panels_by_care(raw, years_monthly, outcome, ylabel, title_prefix, filen
         if idx == 0:
             ax.set_ylabel(ylabel)
         ax.set_title(care_info.label)
-        ax.set_xlim([START, STOP])
+        ax.set_xlim([PLOT_START, STOP])
+        ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+        ax.legend(frameon=False, fontsize=8)
+        if 'anemia' in outcome:
+            ax.set_ylim(bottom=0)
+            sc.SIticks(ax=ax)
+
+    plt.tight_layout()
+    fig.savefig(PLOTFOLDER + filename, dpi=300, bbox_inches='tight')
+    print(f"Saved: {PLOTFOLDER}{filename}")
+    return fig
+
+
+def plot_panels_by_hiud(raw, years_monthly, outcome, ylabel, title_prefix, filename):
+    """3 panels (low/mid/high hIUD). Per panel: counterfactual + 3 care lines.
+    Scenario lines are masked before INTV_YEAR so only status quo shows pre-intervention."""
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
+    fig.suptitle(f'{title_prefix}\n'
+                 f'Status quo before {INTV_YEAR}, intervention after. Mid RR ({RR_MID})',
+                 fontsize=13)
+
+    for idx, (hiud_name, hiud_info) in enumerate(HIUD_LEVELS.items()):
+        ax = axes[idx]
+
+        # Status quo: full line
+        cf_arr = np.array(raw['counterfactual'][outcome])
+        ax.plot(years_monthly, cf_arr.mean(axis=0), color='#6c757d', ls='--', lw=2,
+                label='Status quo')
+
+        # Scenario lines: post-intervention only
+        for care_name, care_info in CARE_LEVELS.items():
+            key = f'{care_name}_{hiud_name}'
+            arr = np.array(raw[key][outcome])
+            mean = arr.mean(axis=0)
+            std = arr.std(axis=0)
+            mean_masked = _mask_pre_intv(years_monthly, mean)
+            std_masked = _mask_pre_intv(years_monthly, std)
+            ax.plot(years_monthly, mean_masked, color=CARE_LINE_COLORS[care_name],
+                    lw=1.8, label=care_info.label)
+            ax.fill_between(years_monthly, mean_masked - std_masked, mean_masked + std_masked,
+                            color=CARE_LINE_COLORS[care_name], alpha=0.15)
+
+        ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
+        ax.set_xlabel('Year')
+        if idx == 0:
+            ax.set_ylabel(ylabel)
+        ax.set_title(hiud_info.label)
+        ax.set_xlim([PLOT_START, STOP])
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.legend(frameon=False, fontsize=8)
         if 'anemia' in outcome:
@@ -389,7 +462,7 @@ def plot_pct_reduction_by_care(raw, years, outcome, ylabel, title_prefix, filena
         if idx == 0:
             ax.set_ylabel(ylabel)
         ax.set_title(care_info.label)
-        ax.set_xlim([START, STOP]); ax.set_ylim(bottom=0)
+        ax.set_xlim([PLOT_START, STOP]); ax.set_ylim(bottom=0)
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.legend(frameon=False, fontsize=9)
 
@@ -427,7 +500,7 @@ def plot_pct_reduction_by_hiud(raw, years, outcome, ylabel, title_prefix, filena
         if idx == 0:
             ax.set_ylabel(ylabel)
         ax.set_title(hiud_info.label)
-        ax.set_xlim([START, STOP]); ax.set_ylim(bottom=0)
+        ax.set_xlim([PLOT_START, STOP]); ax.set_ylim(bottom=0)
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         ax.legend(frameon=False, fontsize=9)
 
@@ -475,7 +548,8 @@ def plot_heatmap(raw, years, outcome, title, filename, fmt='.1f'):
 
 
 def plot_combined_absolute(raw, years_monthly):
-    """Side-by-side: HMB prevalence and HMB-related anemia, all 10 lines."""
+    """Side-by-side: HMB prevalence and HMB-related anemia, all 10 lines.
+    Scenario lines are masked before INTV_YEAR."""
     fig, axes = plt.subplots(1, 2, figsize=(18, 6))
     fig.suptitle(f'HMB prevalence and HMB-related anemia by scenario\n'
                  f'Mid RR ({RR_MID})', fontsize=14)
@@ -488,22 +562,26 @@ def plot_combined_absolute(raw, years_monthly):
     for idx, (outcome, title, ylabel) in enumerate(panels):
         ax = axes[idx]
 
+        # Status quo: full line
         cf = np.array(raw['counterfactual'][outcome])
         ax.plot(years_monthly, cf.mean(axis=0), color='#6c757d', ls='--', lw=2.5,
                 label='Status quo')
 
+        # Scenario lines: post-intervention only
         for care_name in CARE_LEVELS:
             for hiud_name in HIUD_LEVELS:
                 key = f'{care_name}_{hiud_name}'
                 arr = np.array(raw[key][outcome])
+                mean = arr.mean(axis=0)
+                mean_masked = _mask_pre_intv(years_monthly, mean)
                 label = f'{CARE_LEVELS[care_name].label} + {HIUD_LEVELS[hiud_name].label}'
-                ax.plot(years_monthly, arr.mean(axis=0),
+                ax.plot(years_monthly, mean_masked,
                         color=CARE_COLORS[care_name][hiud_name], lw=1.2,
                         label=label)
 
         ax.axvline(INTV_YEAR, color='k', ls='--', lw=1.5)
         ax.set_xlabel('Year'); ax.set_ylabel(ylabel); ax.set_title(title)
-        ax.set_xlim([START, STOP])
+        ax.set_xlim([PLOT_START, STOP])
         ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
         if idx == 1:
             ax.set_ylim(bottom=0); sc.SIticks(ax=ax)
@@ -610,6 +688,17 @@ if __name__ == '__main__':
         outcome='anemia_hmb_monthly', ylabel='Monthly anemia cases (HMB women)',
         title_prefix='HMB-related anemia by scenario',
         filename='anemia_hmb_by_care.png')
+
+    # ── Absolute plots by hIUD level ──
+    plot_panels_by_hiud(raw, years_monthly,
+        outcome='hmb_prev_monthly', ylabel='HMB prevalence',
+        title_prefix='HMB prevalence by scenario',
+        filename='hmb_prev_by_hiud.png')
+
+    plot_panels_by_hiud(raw, years_monthly,
+        outcome='anemia_hmb_monthly', ylabel='Monthly anemia cases (HMB women)',
+        title_prefix='HMB-related anemia by scenario',
+        filename='anemia_hmb_by_hiud.png')
 
     # ── % reduction by care level ──
     plot_pct_reduction_by_care(raw, years_full,
